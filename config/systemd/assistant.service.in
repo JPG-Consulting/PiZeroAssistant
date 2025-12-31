@@ -1,0 +1,26 @@
+[Unit]
+Description=Offline Voice Assistant (Wake Word)
+After=sound.target network.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@WORKDIR@
+
+Environment=PYTHONPATH=src
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=@PYTHON@ -m assistant.main --config config/config.yaml
+
+Restart=on-failure
+RestartSec=2
+
+Nice=5
+LimitNOFILE=4096
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

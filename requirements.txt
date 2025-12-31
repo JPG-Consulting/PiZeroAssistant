@@ -1,0 +1,8 @@
+numpy>=1.24
+PyYAML>=6.0
+onnxruntime>=1.16
+scipy>=1.10
+pyalsaaudio>=0.10
+
+# Optional VAD
+webrtcvad>=2.0.10

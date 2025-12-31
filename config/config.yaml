@@ -1,0 +1,35 @@
+audio:
+  device: "hw:1,0"              # null = default input device; or set to device index/name
+  sample_rate: 16000
+  channels: 1
+  dtype: int16
+  block_ms: 20              # audio callback block size (ms)
+
+vad:
+  type: webrtc              # webrtc | energy
+  webrtc:
+    aggressiveness: 2       # 0..3 (higher = fewer false positives, more misses)
+  energy:
+    rms_threshold: 0.012    # tune if using energy VAD fallback
+    hangover_ms: 200        # keep "speech=true" for a bit after it drops
+
+features:
+  n_mels: 40
+  win_ms: 25
+  hop_ms: 10
+  clip_seconds: 1.0         # MUST match training
+  n_fft: 1024
+  fmin: 20
+  fmax: 7600
+  log_eps: 1.0e-6
+
+wakeword:
+  model_path: models/wakeword_tiny_dscnn_int8.onnx
+  input_name: logmel
+  output_name: logits
+  threshold: 0.80           # probability threshold for wake
+  consecutive_hits: 2       # require N consecutive detections
+  cooldown_ms: 1500         # ignore triggers for this long after a hit
+
+runtime:
+  log_level: INFO

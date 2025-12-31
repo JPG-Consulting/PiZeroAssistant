@@ -10,8 +10,11 @@ vad:
   webrtc:
     aggressiveness: 2       # 0..3 (higher = fewer false positives, more misses)
   energy:
-    rms_threshold: 0.012    # tune if using energy VAD fallback
-    hangover_ms: 200        # keep "speech=true" for a bit after it drops
+    rms_threshold: 0.02     # tune if using energy VAD fallback
+    start_frames: 6         # number of consecutive blocks required to enter SPEECH ( 2 -> 40 ms; 3 -> 60 ms)
+    hangover_ms: 500        # keep "speech=true" for a bit after it drops
+    noise_alpha: 0.02       # adaptation speed (slow = stable)
+    noise_factor: 2.5       # how much louder speech must be
 
 features:
   n_mels: 40

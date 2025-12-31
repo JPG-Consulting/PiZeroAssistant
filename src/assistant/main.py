@@ -62,6 +62,8 @@ def main():
         vad = EnergyVAD(
             rms_threshold=cfg.vad.energy.rms_threshold,
             hangover_ms=cfg.vad.energy.hangover_ms,
+            block_ms=cfg.audio.block_ms,
+            start_frames=getattr(cfg.vad.energy, "start_frames", 1),
         )
         vad_is_speech = lambda pcm: vad.is_speech(pcm, sample_rate=cfg.audio.sample_rate)
         log.info("VAD: Energy (rms_threshold=%.4f)", cfg.vad.energy.rms_threshold)

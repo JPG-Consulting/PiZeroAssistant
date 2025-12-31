@@ -1,1 +1,2 @@
-from .onnx_kws import OnnxWakeword
+__all__ = []
+

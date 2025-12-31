@@ -46,13 +46,25 @@ class FeatureConfig:
 
 
 @dataclass(frozen=True)
+class SimulatedWakewordConfig:
+    cooldown_sec: float
+    trigger_probability: float
+
+
+@dataclass(frozen=True)
 class WakewordConfig:
+    type: str
+
+    # ONNX-related (may be unused in simulated mode)
     model_path: str
     input_name: str
     output_name: str
     threshold: float
     consecutive_hits: int
     cooldown_ms: int
+
+    # Simulated wake-word
+    simulated: SimulatedWakewordConfig
 
 
 @dataclass(frozen=True)
@@ -113,12 +125,19 @@ def load_config(path: str | Path) -> AppConfig:
             log_eps=float(feats.get("log_eps", 1.0e-6)),
         ),
         wakeword=WakewordConfig(
-            model_path=str(ww["model_path"]),
+            type=str(ww.get("type", "simulated")),
+
+            model_path=str(ww.get("model_path", "")),
             input_name=str(ww.get("input_name", "logmel")),
             output_name=str(ww.get("output_name", "logits")),
             threshold=float(ww.get("threshold", 0.80)),
             consecutive_hits=int(ww.get("consecutive_hits", 2)),
             cooldown_ms=int(ww.get("cooldown_ms", 1500)),
+
+            simulated=SimulatedWakewordConfig(
+                cooldown_sec=float(ww.get("simulated", {}).get("cooldown_sec", 5.0)),
+                trigger_probability=float(ww.get("simulated", {}).get("trigger_probability", 0.02)),
+            ),
         ),
         runtime=RuntimeConfig(
             log_level=str(rt.get("log_level", "INFO"))

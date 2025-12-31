@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from assistant.wakeword.metrics import WakeWordMetrics
+from assistant.wakeword.factory import create_wake_detector
+
 import argparse
 import logging
 import time
 
 from assistant.config import load_config
 from assistant.audio import AlsaMicStream
-from assistant.dsp import LogMelExtractor
-from assistant.wakeword import OnnxWakeword
 
 # VAD selection
 from assistant.vad import EnergyVAD
@@ -43,7 +44,6 @@ def main():
         block_ms=cfg.audio.block_ms,
         device=cfg.audio.device,
         channels=cfg.audio.channels,
-        dtype=cfg.audio.dtype,
         ring_seconds=max(3.0, cfg.features.clip_seconds + 1.0),
     )
 
@@ -70,64 +70,42 @@ def main():
     else:
         raise ValueError("vad.type must be 'webrtc' or 'energy'")
 
-    # Feature extractor (must match training)
-    feats = LogMelExtractor(
-        sr=cfg.audio.sample_rate,
-        n_fft=cfg.features.n_fft,
-        win_ms=cfg.features.win_ms,
-        hop_ms=cfg.features.hop_ms,
-        n_mels=cfg.features.n_mels,
-        fmin=cfg.features.fmin,
-        fmax=cfg.features.fmax,
-        log_eps=cfg.features.log_eps,
-        clip_seconds=cfg.features.clip_seconds,
-    )
+    # Metrics + detector
+    wake_metrics = WakeWordMetrics()
+    wake_detector = create_wake_detector(cfg, wake_metrics)
 
-    # Wakeword ONNX
-    wake = OnnxWakeword(
-        model_path=cfg.wakeword.model_path,
-        input_name=cfg.wakeword.input_name,
-        output_name=cfg.wakeword.output_name,
-        threshold=cfg.wakeword.threshold,
-        consecutive_hits=cfg.wakeword.consecutive_hits,
-        cooldown_ms=cfg.wakeword.cooldown_ms,
-    )
-
-    log.info("Wakeword model: %s", cfg.wakeword.model_path)
+    log.info("Wakeword detector: %s", cfg.wakeword.type)
     log.info("Listening... Ctrl+C to stop.")
 
     mic.start()
     try:
         last_print = 0.0
+        last_report = time.time()
         while True:
+            now = time.time()
+            if now - last_report > 60:
+                wake_metrics.report()
+                last_report = now
+
             mic.poll()  # <-- ALSA read happens here
             fr = mic.pop_frame()
             if fr is None:
                 time.sleep(0.001)
                 continue
 
-
             # VAD on the current block
             speech = vad_is_speech(fr.pcm16)
 
+            # Wake-word detection
+            wake_triggered = wake_detector.process_frame(speech)
+
+            if wake_triggered:
+                log.info("SIMULATED WAKE triggered")
+
             # Optional: occasional debug
-            now = time.time()
             if now - last_print > 5.0:
                 log.debug("speech=%s", speech)
                 last_print = now
-
-            if not speech:
-                continue
-
-            # When speech is present: score wakeword on the last clip window
-            samples = mic.get_last_samples(feats.num_samples)  # int16
-            logmel = feats.extract(samples)                    # (1, n_mels, frames)
-            p_wake = wake.score(logmel)
-
-            if wake.update(p_wake):
-                log.info("WAKEWORD DETECTED (p=%.3f)", p_wake)
-            else:
-                log.debug("p_wake=%.3f", p_wake)
 
     except KeyboardInterrupt:
         log.info("Stopping...")

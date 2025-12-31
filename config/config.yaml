@@ -1,12 +1,12 @@
 audio:
-  device: "hw:1,0"              # null = default input device; or set to device index/name
+  device: "plughw:1,0"              # null = default input device; or set to device index/name
   sample_rate: 16000
   channels: 1
   dtype: int16
   block_ms: 20              # audio callback block size (ms)
 
 vad:
-  type: webrtc              # webrtc | energy
+  type: energy              # webrtc | energy
   webrtc:
     aggressiveness: 2       # 0..3 (higher = fewer false positives, more misses)
   energy:

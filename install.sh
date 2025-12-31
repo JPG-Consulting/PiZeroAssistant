@@ -97,7 +97,7 @@ run "sudo apt-get install -y \
   python3-pip \
   python3-dev \
   libasound2-dev \
-  libatlas-base-dev \
+  libopenblas-dev \
   build-essential"
 
 # ---- python virtual environment -------------------------------

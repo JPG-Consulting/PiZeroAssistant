@@ -72,7 +72,7 @@ def main():
 
     # Metrics + detector
     wake_metrics = WakeWordMetrics()
-    wake_detector = create_wake_detector(cfg, wake_metrics)
+    wake_detector = create_wake_detector(cfg, wake_metrics, mic)
 
     log.info("Wakeword detector: %s", cfg.wakeword.type)
     log.info("Listening... Ctrl+C to stop.")
@@ -100,7 +100,7 @@ def main():
             wake_triggered = wake_detector.process_frame(speech)
 
             if wake_triggered:
-                log.info("SIMULATED WAKE triggered")
+                log.info("WAKE triggered")
 
             # Optional: occasional debug
             if now - last_print > 5.0:

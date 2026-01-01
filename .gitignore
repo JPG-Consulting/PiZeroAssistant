@@ -9,3 +9,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Models (generated / downloaded)
+models/

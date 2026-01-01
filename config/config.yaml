@@ -27,13 +27,13 @@ features:
   log_eps: 1.0e-6
 
 wakeword:
-  type: simulated
-  model_path: models/wakeword_tiny_dscnn_int8.onnx
+  type: onnx
+  model_path: models/dummy_wake.onnx
   input_name: logmel
-  output_name: logits
-  threshold: 0.80           # probability threshold for wake
-  consecutive_hits: 2       # require N consecutive detections
-  cooldown_ms: 1500         # ignore triggers for this long after a hit
+  output_name: prob
+  threshold: 0.50           # probability threshold for wake
+  consecutive_hits: 1       # require N consecutive detections
+  cooldown_ms: 3000         # ignore triggers for this long after a hit
 
   simulated:
     cooldown_sec: 5.0

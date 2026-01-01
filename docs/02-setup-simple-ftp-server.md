@@ -66,6 +66,11 @@ We will create an `ftp` folder **inside your home directory**, with an `uploads`
 mkdir /home/YOUR_USERNAME/ftp
 mkdir /home/YOUR_USERNAME/ftp/uploads
 ```
+Change the permissions on the ftp directory using :
+
+```bash
+chmod a-w /home/YOUR_USERNAME/ftp
+```
 
 📁 Files you upload and download will be located in:
 
@@ -89,17 +94,20 @@ sudo cp /etc/vsftpd.conf /etc/vsftpd.conf.backup
 sudo nano /etc/vsftpd.conf
 ```
 
-### Replace the content with this minimal configuration
+In this file find the following lines and un-comment them by deleting the # character :
 
 ```conf
-listen=YES
-listen_ipv6=NO
-
+anonymous_enable=NO
 local_enable=YES
 write_enable=YES
-
+local_umask=022
 chroot_local_user=YES
-allow_writeable_chroot=YES
+```
+
+Add the following lines to the end of the file :
+
+```conf
+user_sub_token=$USER
 local_root=/home/$USER/ftp
 ```
 

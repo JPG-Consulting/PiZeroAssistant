@@ -90,17 +90,25 @@ class OnnxWakeWordDetector:
     # -----------------------------
 
     def _infer(self, logmel: np.ndarray) -> float:
+        x = np.ascontiguousarray(logmel, dtype=np.float32)
+
+        # Ensure shape is (B, C, n_mels, frames)
+        # logmel comes as (1, n_mels, frames)
+        if x.ndim == 3:
+            x = x[:, None, :, :]   # -> (1, 1, n_mels, frames)
+
         outputs = self.session.run(
             [self.output_name],
-            {self.input_name: logmel.astype(np.float32)},
+            {self.input_name: x},
         )[0]
 
         # Normalize output
         if outputs.ndim == 2 and outputs.shape[1] == 2:
-            # logits or probs
+            # logits or probs: [not_wake, wake]
             probs = self._softmax(outputs)[0]
             return float(probs[1])
         else:
+            # (1,), (1,1), or scalar
             return float(outputs.squeeze())
 
     @staticmethod

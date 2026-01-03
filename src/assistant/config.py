@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Tuple
 import yaml
 
 
@@ -52,6 +52,11 @@ class SimulatedWakewordConfig:
 
 
 @dataclass(frozen=True)
+class OpenWakeWordConfig:
+    models: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class WakewordConfig:
     type: str
 
@@ -65,6 +70,9 @@ class WakewordConfig:
 
     # Simulated wake-word
     simulated: SimulatedWakewordConfig
+
+    # OpenWakeWord
+    openwakeword: OpenWakeWordConfig
 
 
 @dataclass(frozen=True)
@@ -95,6 +103,8 @@ def load_config(path: str | Path) -> AppConfig:
     feats = raw["features"]
     ww = raw["wakeword"]
     rt = raw.get("runtime", {})
+
+    oww = ww.get("openwakeword", {})
 
     return AppConfig(
         audio=AudioConfig(
@@ -137,6 +147,10 @@ def load_config(path: str | Path) -> AppConfig:
             simulated=SimulatedWakewordConfig(
                 cooldown_sec=float(ww.get("simulated", {}).get("cooldown_sec", 5.0)),
                 trigger_probability=float(ww.get("simulated", {}).get("trigger_probability", 0.02)),
+            ),
+
+            openwakeword=OpenWakeWordConfig(
+                models=tuple(oww.get("models", ()))
             ),
         ),
         runtime=RuntimeConfig(

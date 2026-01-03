@@ -6,6 +6,7 @@ The assistant currently supports:
 - ALSA microphone input (via PortAudio / `sounddevice`)
 - Offline VAD
 - Offline ONNX wake word detection
+- Optional OpenWakeWord backend (set `wakeword.type: openwakeword`)
 
 It is designed to be **production-ready** and easy to update from GitHub.
 
@@ -67,6 +68,12 @@ This installs all required libraries:
 - `sounddevice`
 - `webrtcvad` (optional)
 - `numpy`, `scipy`, `PyYAML`, etc.
+
+If you want to try the **OpenWakeWord** backend, also install the optional package:
+
+```bash
+pip install openwakeword
+```
 
 ---
 

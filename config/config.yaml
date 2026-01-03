@@ -27,13 +27,17 @@ features:
   log_eps: 1.0e-6
 
 wakeword:
-  type: onnx
+  type: onnx                # onnx | openwakeword | simulated
   model_path: models/dummy_wake.onnx
   input_name: logmel
   output_name: prob
   threshold: 0.50           # probability threshold for wake
   consecutive_hits: 1       # require N consecutive detections
   cooldown_ms: 3000         # ignore triggers for this long after a hit
+
+  # OpenWakeWord backend (only used when type: openwakeword)
+  openwakeword:
+    models: []              # optional list of built-in model names, leave empty for defaults
 
   simulated:
     cooldown_sec: 5.0

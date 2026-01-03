@@ -43,11 +43,8 @@ class OpenWakeWordDetector:
         if self._window_samples <= 0:
             raise ValueError("features.clip_seconds must be > 0 for OpenWakeWord")
 
-        model_kwargs = {}
-        if models:
-            model_kwargs["wakeword_models"] = list(models)
-
-        self.model = Model(**model_kwargs)
+        self.models = set(models) if models else None
+        self.model = Model()
 
     # -----------------------------
 
@@ -66,7 +63,13 @@ class OpenWakeWordDetector:
             return False
 
         audio = samples.astype(np.float32) / 32768.0
+
         probs = self.model.predict(audio)
+
+        # Filter only selected wakewords
+        if self.models:
+            probs = {k: v for k, v in probs.items() if k in self.models}
+
         if not probs:
             return False
 

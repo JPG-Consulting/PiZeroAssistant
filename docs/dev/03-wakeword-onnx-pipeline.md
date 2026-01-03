@@ -1,147 +1,134 @@
-# Wake-word ONNX Pipeline (Developer Notes)
+# Wake-word ONNX Pipeline (Final)
 
-## Overview
-This project uses a wake-word detector running fully offline on Raspberry Pi Zero 2 W.
-Wake-word models are trained externally and deployed as ONNX files.
+This document describes the complete, reproducible pipeline used to build,
+validate, train, export, and deploy an offline wake-word detector using ONNX.
 
-This document describes:
-- the ONNX input/output contract
-- the role of the dummy wake-word model
-- how inference is wired in the assistant
-- how training artifacts are brought into Google Colab
+It is hardware-agnostic and does not assume any local filesystem layout.
 
 ---
 
-## Dummy Wake-word Model (Smoke Test)
+## 1. Dataset Structure
 
-A dummy ONNX model (`dummy_wake.onnx`) is used during development to validate:
-- ONNXRuntime availability on ARM
-- feature extraction correctness
-- detector cooldown and metrics logic
+The dataset is expected to follow this structure:
 
-This model is **not** a real wake-word detector.
-It always outputs a fixed wake probability.
+    dataset/
+    ├── wake/
+    │   ├── sample_001.wav
+    │   ├── sample_002.wav
+    │   └── ...
+    └── not_wake/
+        ├── noise_001.wav
+        ├── speech_001.wav
+        └── ...
 
-### Why it exists
-- isolate infrastructure bugs from model quality
-- enable early testing without a trained model
-
-### Why it is not versioned
-- models are large binaries
-- real models are user- or project-specific
-- the repository defines the interface, not the trained weights
+All WAV files must be:
+- Mono
+- 16 kHz
+- PCM (int16 or float32)
 
 ---
 
-## ONNX Model Contract
+## 2. WAV Validation
+
+Before training, validate audio integrity:
+
+    python tools/validate_wavs.py <path/to/dataset/wake>
+    python tools/validate_wavs.py <path/to/dataset/not_wake>
+
+This checks:
+- readable WAV headers
+- correct sample rate
+- mono audio
+
+---
+
+## 3. RMS & Clipping Audit
+
+Next, audit signal quality:
+
+    python tools/audit_rms.py <path/to/dataset/wake>
+    python tools/audit_rms.py <path/to/dataset/not_wake>
+
+Files may be flagged as:
+- LOW_RMS (too quiet)
+- HIGH_RMS
+- CLIPPING
+
+Flagged files are automatically moved into a `_bad/` subfolder and excluded from training.
+
+---
+
+## 4. Creating the Training ZIP
+
+Create a ZIP containing the cleaned dataset folder.
+
+Important:
+- the folder **inside the ZIP** must be named `dataset/`
+- the ZIP filename itself is arbitrary
+
+Example:
+
+    zip -r dataset.zip dataset
+
+---
+
+## 5. Google Colab Setup
+
+In Google Colab, mount Drive:
+
+    from google.colab import drive
+    drive.mount("/content/drive")
+
+Copy and extract:
+
+    !cp /content/drive/MyDrive/dataset.zip .
+    !unzip dataset.zip
+
+Expected path after extraction:
+
+    DATASET_ROOT = "/content/dataset"
+
+---
+
+## 6. Feature Extraction
+
+The model uses:
+- Log-Mel spectrograms
+- 40 mel bins
+- 25 ms window
+- 10 ms hop
+- 1.0 s context window
+
+These parameters **must match deployment**.
+
+---
+
+## 7. Model Training
+
+A TinyDSCNN-style binary classifier is trained using BCEWithLogitsLoss.
+
+Class imbalance is handled using `pos_weight`.
+
+---
+
+## 8. ONNX Export
+
+Export with:
+- opset <= 11
+- static input shape
+
+---
+
+## 9. Deployment Contract
 
 ### Input
-- **Name**: `logmel` (configurable)
-- **Shape**: `(1, n_mels, frames)`
-- **Dtype**: `float32`
-- **Content**: log-mel spectrogram
+
+    (1, 1, n_mels, frames) float32
 
 ### Output
-Supported output formats:
-- `(1,)` → wake probability
-- `(1, 1)` → wake probability (scalar wrapped in batch and channel)
-- `(1, 2)` → `[not_wake, wake]` scores
 
-The detector collapses all supported formats to a single scalar probability internally.
+    (1,) wake probability
 
 ---
 
-## Model Generation Constraints
-
-ONNX models must be generated with:
-- **IR version ≤ 11** (recommended: 7)
-- **Opset ≤ 11**
-
-These constraints are required for compatibility with ARM builds of ONNXRuntime
-used on Raspberry Pi Zero 2 W.
-
-Modern PyTorch exporters may produce higher opset models by default.
-The export pipeline explicitly rewrites IR and opset versions after export.
-
----
-
-## Dummy Model Generation Script
-
-A minimal script is provided under `tools/` to generate a compatible dummy model.
-
-Key properties:
-- fixed output probability
-- explicit IR and opset
-- no dynamic shapes
-- no unsupported operators
-
-This model is used only for smoke testing the runtime.
-
----
-
-## Bringing Real Training Data into Google Colab
-
-Wake-word training is performed on a PC or in Google Colab.
-
-### Uploading the dataset
-1. Prepare the dataset directory locally:
-   ```
-   dataset/
-     wake/
-     non_wake/
-   ```
-
-2. Compress it:
-   ```bash
-   zip -r dataset.zip dataset
-   ```
-
-3. Upload `dataset.zip` to Google Drive.
-
-### Mounting Google Drive in Colab
-In Colab, mount Drive:
-```python
-from google.colab import drive
-drive.mount("/content/drive")
-```
-
-Then copy and extract the dataset:
-```python
-import shutil
-shutil.copy(
-    "/content/drive/MyDrive/wakeword-training/dataset.zip",
-    "/content/dataset.zip",
-)
-
-!unzip dataset.zip
-```
-
-The training notebook auto-detects the dataset root, even if it extracts as
-`dataset/dataset`.
-
----
-
-## Training Notebook
-
-The complete training, export, and validation pipeline is documented in:
-
-```
-docs/dev/colab_wakeword_training_notebook.md
-```
-
-That document includes:
-- dataset loading and validation
-- TinyDSCNN training
-- ONNX export compatible with ARM
-- ONNXRuntime-based validation (not `onnx.checker`)
-
----
-
-## Summary
-
-- The repository defines the wake-word **interface**, not the trained weights
-- ONNXRuntime is the final authority for model validity
-- Output shapes `(1,)`, `(1,1)` and `(1,2)` are all supported
-- Training and deployment are cleanly separated
-
-This document is intended to remain stable across model iterations.
+This document represents the final, stable wake-word pipeline.

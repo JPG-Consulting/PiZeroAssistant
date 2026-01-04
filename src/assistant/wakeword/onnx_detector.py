@@ -73,6 +73,8 @@ class OnnxWakeWordDetector:
 
         logmel = self.feats.extract(samples)  # (1, n_mels, frames)
 
+        print("logmel mean:", logmel.mean(), "std:", logmel.std())
+
         p_wake = self._infer(logmel)
 
         if p_wake >= self.threshold:
@@ -93,26 +95,18 @@ class OnnxWakeWordDetector:
         x = np.ascontiguousarray(logmel, dtype=np.float32)
 
         # Ensure shape is (B, C, n_mels, frames)
-        # logmel comes as (1, n_mels, frames)
         if x.ndim == 3:
             x = x[:, None, :, :]   # -> (1, 1, n_mels, frames)
 
-        outputs = self.session.run(
+        prob = self.session.run(
             [self.output_name],
             {self.input_name: x},
         )[0]
 
-        # Normalize output
-        if outputs.ndim == 2 and outputs.shape[1] == 2:
-            # logits or probs: [not_wake, wake]
-            probs = self._softmax(outputs)[0]
-            return float(probs[1])
-        else:
-            # (1,), (1,1), or scalar
-            return float(outputs.squeeze())
+        prob = float(prob.squeeze())
 
-    @staticmethod
-    def _softmax(x):
-        x = x - np.max(x, axis=-1, keepdims=True)
-        e = np.exp(x)
-        return e / np.sum(e, axis=-1, keepdims=True)
+        # 🔍 DEBUG LOG
+        print(f"[WAKE] prob={prob:.6f}")
+
+        return prob
+

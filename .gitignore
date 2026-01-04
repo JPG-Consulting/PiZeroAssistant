@@ -10,5 +10,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Models (generated / downloaded)
-models/
+# Models (ignore everything by default)
+models/*
+
+# keep a README explaining the folder
+!models/README.md

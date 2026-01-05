@@ -2,10 +2,19 @@
 
 This folder contains small utility scripts for preparing and evaluating wake-word datasets and models. Each entry below lists the key arguments and when they are helpful.
 
+> Run these tools from the repository root so configuration files resolve correctly, for example:
+>
+> ```bash
+> PYTHONPATH=src python tools/record_wakeword.py --duration 2.5 data/new_sample.wav
+> ```
+
 ## Audio dataset utilities
 - **`record_wakeword.py`** – Records wake-word training audio through the same ALSA microphone path used at runtime so capture conditions match deployment.
   - Arguments: `output` (WAV path), `--duration` (seconds to record, default `3.0`), `--config` (YAML config file, default `config/config.yaml`).
   - When to use: Capture wake-word examples for a training dataset with the exact runtime audio format (mono int16, 16 kHz) and quick level statistics for quality checks.
+- **`record_dataset.py`** – Collects multiple wake-word recordings in one session using the same pipeline as `record_wakeword.py` without spawning subprocesses.
+  - Arguments: `output_dir` (folder for numbered WAV files), `--count` (recording count, default `10`), `--duration` (seconds per clip, default `3.0`), `--config` (YAML config file, default `config/config.yaml`).
+  - When to use: Capture a batch of wake-word examples interactively with prompts between takes while keeping audio handling identical to the single-recording tool.
 - **`audit_rms.py`** – Audits a folder of WAV files for RMS/peak levels, optionally moving bad files into a `_bad` subfolder.
   - Arguments: `folder` (path to `.wav` files), `--rms-min`/`--rms-max` (acceptable RMS window, defaults `0.008–0.20`), `--peak-max` (clipping threshold, default `0.99`), `--move-bad` (flag to relocate offenders).
   - When to use: Quickly check incoming recordings for inconsistent levels or clipping before further processing; the thresholds help catch quiet wake words or overdriven negatives.

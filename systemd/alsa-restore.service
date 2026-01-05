@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore ReSpeaker ALSA mixer settings
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/restore_respeaker_mic.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

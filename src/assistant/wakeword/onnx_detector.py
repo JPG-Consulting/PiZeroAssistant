@@ -52,6 +52,10 @@ class OnnxWakeWordDetector:
             providers=["CPUExecutionProvider"],
         )
 
+        print("ONNX inputs :", [(i.name, i.shape, i.type) for i in self.session.get_inputs()])
+        print("ONNX outputs:", [(o.name, o.shape, o.type) for o in self.session.get_outputs()])
+
+
         self.input_name = input_name
         self.output_name = output_name
 
@@ -68,6 +72,27 @@ class OnnxWakeWordDetector:
             return False
 
         samples = self._get_audio_samples(self.feats.num_samples)
+
+        # -------------------------------------------------
+        # Software gain control (STABLE, deterministic)
+        # -------------------------------------------------
+        samples = samples.astype(np.float32)
+
+        # Soft limiter to avoid hard clipping (CRITICAL)
+        samples *= 2.5
+        samples = np.tanh(samples / 20000.0) * 20000.0
+
+        samples = samples.astype(np.int16)
+
+        print(
+            "samples stats:",
+            "dtype=", samples.dtype,
+            "min=", samples.min(),
+            "max=", samples.max(),
+            "mean=", samples.mean(),
+            "std=", samples.std(),
+        )
+
         if samples is None:
             return False
 

@@ -100,6 +100,18 @@ run "sudo apt-get install -y \
   libopenblas-dev \
   build-essential"
 
+# ---- ALSA microphone configuration ----------------------------
+
+ALSA_SCRIPT="$REPO_ROOT/scripts/alsa/restore_respeaker_mic.sh"
+
+if [ -f "$ALSA_SCRIPT" ]; then
+  log "Applying ALSA microphone configuration"
+
+  run "sudo \"$ALSA_SCRIPT\""
+else
+  log "WARNING: ALSA script not found: $ALSA_SCRIPT"
+fi
+
 # ---- python virtual environment -------------------------------
 
 if [ ! -d "$VENV_DIR" ]; then
@@ -116,6 +128,24 @@ run "\"$PYTHON_BIN\" -m pip install -r \"$REPO_ROOT/requirements.txt\""
 # ---- systemd service (optional) -------------------------------
 
 if ! $NO_SERVICE; then
+  # ---- ALSA restore systemd service -----------------------------
+  ALSA_SCRIPT_SRC="$REPO_ROOT/scripts/alsa/restore_respeaker_mic.sh"
+  ALSA_SCRIPT_DST="/usr/local/bin/restore_respeaker_mic.sh"
+  ALSA_SERVICE_SRC="$REPO_ROOT/systemd/alsa-restore.service"
+  ALSA_SERVICE_DST="/etc/systemd/system/alsa-restore.service"
+
+  if [ -f "$ALSA_SCRIPT_SRC" ] && [ -f "$ALSA_SERVICE_SRC" ]; then
+    log "Installing ALSA restore service"
+
+    run "sudo cp \"$ALSA_SCRIPT_SRC\" \"$ALSA_SCRIPT_DST\""
+    run "sudo chmod +x \"$ALSA_SCRIPT_DST\""
+
+    run "sudo cp \"$ALSA_SERVICE_SRC\" \"$ALSA_SERVICE_DST\""
+  else
+    log "WARNING: ALSA restore service files not found"
+  fi
+
+  # assistant,service
   TEMPLATE="$REPO_ROOT/systemd/assistant.service.in"
 
   if [ ! -f "$TEMPLATE" ]; then
@@ -141,6 +171,9 @@ if ! $NO_SERVICE; then
   log "Reloading systemd"
   run "sudo systemctl daemon-reexec"
   run "sudo systemctl daemon-reload"
+
+  run "sudo systemctl enable alsa-restore"
+  run "sudo systemctl restart alsa-restore"
 
   log "Enabling service '$SERVICE_NAME'"
   run "sudo systemctl enable \"$SERVICE_NAME\""

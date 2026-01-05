@@ -42,6 +42,15 @@ def parse_args() -> argparse.Namespace:
         default=Path("config/config.yaml"),
         help="Path to the YAML configuration file",
     )
+    ap.add_argument(
+        "--prefix",
+        type=str,
+        default="recording",
+        help=(
+            "Base filename prefix used for each recording (default: 'recording'). "
+            "For example, --prefix wake_01 produces files like wake_01_001.wav."
+        ),
+    )
     return ap.parse_args()
 
 
@@ -53,9 +62,11 @@ def main() -> None:
     print(f"Output directory : {args.output_dir}")
     print(f"Recordings       : {args.count}")
     print(f"Duration         : {args.duration:.2f} s")
+    print(f"Filename prefix  : {args.prefix}")
 
     for idx in range(1, args.count + 1):
-        output_path = args.output_dir / f"recording_{idx:03d}.wav"
+        filename = f"{args.prefix}_{idx:03d}.wav"
+        output_path = args.output_dir / filename
         print(f"\n[{idx}/{args.count}] Recording to {output_path}")
         record(args.duration, output_path, args.config)
 

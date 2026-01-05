@@ -16,7 +16,8 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description=(
             "Record wake-word training audio using the ALSA microphone pipeline "
-            "(mono int16, 16 kHz)."
+            "(mono int16, 16 kHz). A short fade-in and fade-out is applied to "
+            "each recording to avoid audible clicks at clip boundaries."
         )
     )
     ap.add_argument(
@@ -110,14 +111,18 @@ def record(duration_sec: float, output_path: Path, config_path: Path) -> None:
     if len(pcm) > needed_bytes:
         pcm = pcm[:needed_bytes]
 
-    samples = np.frombuffer(pcm, dtype=np.int16)
+    samples = np.frombuffer(pcm, dtype=np.int16).copy()
+    # Smooth clip boundaries to avoid audible clicks without changing levels.
+    samples = apply_fade_i16(samples, fade_ms=8.0, sr=cfg.audio.sample_rate)
+    pcm = samples.tobytes()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(output_path, "wb") as wf:
-        wf.setnchannels(cfg.audio.channels)
-        wf.setsampwidth(2)
-        wf.setframerate(cfg.audio.sample_rate)
-        wf.writeframes(pcm)
+    with output_path.open("wb") as f:
+        with wave.open(f, "wb") as wf:
+            wf.setnchannels(cfg.audio.channels)
+            wf.setsampwidth(2)
+            wf.setframerate(cfg.audio.sample_rate)
+            wf.writeframes(pcm)
 
     print("Saved WAV file.")
     print(
@@ -128,6 +133,27 @@ def record(duration_sec: float, output_path: Path, config_path: Path) -> None:
             float(samples.std()),
         )
     )
+
+
+def apply_fade_i16(samples: np.ndarray, fade_ms: float, sr: int) -> np.ndarray:
+    """Apply a short linear fade-in and fade-out to int16 samples."""
+
+    if samples.size == 0:
+        return samples
+
+    fade_samples = max(1, int(sr * fade_ms / 1000.0))
+    fade_len = min(fade_samples, samples.size // 2)
+    if fade_len == 0:
+        return samples
+
+    faded = samples.astype(np.float32, copy=True)
+    ramp = np.linspace(0.0, 1.0, num=fade_len, endpoint=True, dtype=np.float32)
+
+    faded[:fade_len] *= ramp
+    faded[-fade_len:] *= ramp[::-1]
+
+    np.clip(faded, -32768, 32767, out=faded)
+    return faded.astype(np.int16)
 
 
 def main() -> None:

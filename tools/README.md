@@ -18,6 +18,18 @@ This folder contains small utility scripts for preparing and evaluating wake-wor
 - **`audit_rms.py`** – Audits a folder of WAV files for RMS/peak levels, optionally moving bad files into a `_bad` subfolder.
   - Arguments: `folder` (path to `.wav` files), `--rms-min`/`--rms-max` (acceptable RMS window, defaults `0.008–0.20`), `--peak-max` (clipping threshold, default `0.99`), `--move-bad` (flag to relocate offenders).
   - When to use: Quickly check incoming recordings for inconsistent levels or clipping before further processing; the thresholds help catch quiet wake words or overdriven negatives.
+- **`inspect_logmel.py`** – Extracts log-mel features for a directory of WAV files and reports dataset-wide statistics.
+  - Arguments: `root` (search root for `.wav` files), `--config` (YAML config file, default `config/config.yaml`).
+  - When to use: Compare dataset log-mel distributions against runtime expectations using the same `LogMelExtractor` parameters.
+- **`logmel_stats.py`** – Computes per-file and dataset-level log-mel statistics to evaluate compatibility with the trained wake-word model.
+  - Arguments: `root` (search root for `.wav` files), `--config` (YAML config file, default `config/config.yaml`), `--csv` (optional CSV export path).
+  - When to use: Quantitatively check for low/high-energy outliers and inconsistent variance across recordings; save per-file metrics for deeper review.
+  - Notes: The interpretation messages are heuristic and compare files to the rest of the dataset; they highlight concerns but never auto-reject recordings.
+  - How to read the results:
+    - *Mean of per-file means* shows the typical log-mel level across all clips; clustered means suggest files are recorded at similar loudness.
+    - *Std of per-file means* reflects how far those loudness levels spread; a large spread hints that some clips are much quieter or louder than the rest.
+    - Worry if the spread is wide and the interpretation mentions many low- or high-energy files; that usually signals inconsistent recording setups rather than a single odd clip.
+  - Example: `PYTHONPATH=src python tools/logmel_stats.py data/wake --csv stats.csv`
 - **`make_clips.py`** – Generates fixed-length wake and non-wake clips from raw recordings.
   - Arguments: `--in-wake`, `--in-neg` (source folders), `--out` (output dataset root), `--sr` (target sample rate), `--clip-sec` (clip duration), `--neg-clips-per-file` (how many random negatives per long file), `--seed` (repeatable randomness).
   - When to use: Build a balanced, uniform-length dataset from long-form recordings; adjust `clip-sec`/`neg-clips-per-file` to control dataset size and diversity.

@@ -146,14 +146,20 @@ class WakeWordDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         wav = self._load_audio(self.files[idx])
+        # LogMelExtractor already returns (channels=1, n_mels, frames) to mirror the
+        # runtime preprocessing path; avoiding an extra unsqueeze here ensures the
+        # DataLoader batches become (B, 1, n_mels, frames), exactly matching the
+        # ONNX wake-word input contract.
         logmel = self.extractor.extract(wav)  # (1, n_mels, frames)
+        expected_shape = (1, self.extractor.n_mels, self.extractor.num_frames)
+        # The shape assertion stays unconditional to catch any parity regressions;
+        # --debug-logmel-shape only controls the optional success log below.
+        assert (
+            logmel.shape == expected_shape
+        ), f"Unexpected logmel shape {logmel.shape}; expected {expected_shape}"
         if self.debug_logmel_shape:
-            assert logmel.shape == (
-                1,
-                self.extractor.n_mels,
-                self.extractor.num_frames,
-            ), f"Unexpected logmel shape {logmel.shape}; expected (1, {self.extractor.n_mels}, {self.extractor.num_frames})"
-        logmel = torch.from_numpy(logmel).unsqueeze(0)  # (1, 1, n_mels, frames)
+            logging.debug("logmel shape ok: %s", logmel.shape)
+        logmel = torch.from_numpy(logmel)  # (1, n_mels, frames)
         label = torch.tensor([self.labels[idx]], dtype=torch.float32)
         return logmel, label
 
@@ -173,6 +179,8 @@ class SmallCNN(nn.Module):
         self.fc = nn.Linear(64 * 4 * 4, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Batching should supply 4D tensors only: (batch, 1, n_mels, frames).
+        assert x.dim() == 4 and x.shape[1] == 1, f"Expected 4D input with channel=1, got {tuple(x.shape)}"
         x = torch.relu(self.conv1(x))
         x = self.pool(x)
         x = torch.relu(self.conv2(x))
@@ -306,6 +314,8 @@ def export_onnx(model: nn.Module, feature_cfg: FeatureConfig, output: Path):
     num_frames = 1 + (num_samples - win_length) // hop_length
     dummy = torch.zeros(1, 1, feature_cfg.n_mels, num_frames)
     wrapper = SigmoidONNXWrapper(model.eval())
+    # Preserve the exact runtime contract used by src/assistant/wakeword/onnx_detector.py:
+    # input name "logmel" with shape (1, 1, n_mels, frames) and output name "prob".
     torch.onnx.export(
         wrapper,
         dummy,

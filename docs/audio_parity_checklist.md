@@ -109,6 +109,34 @@ Before merging audio-related changes:
 
 ---
 
+## 6.5 Automated parity enforcement (recommended)
+
+To prevent silent regressions, audio parity SHOULD be enforced with
+automated tests that do **not** rely on committed audio files.
+
+Recommended approach:
+
+- Use **deterministic synthetic int16 PCM signals** (silence, impulse, sine, noise).
+- Run them through:
+  - runtime preprocessing
+  - training preprocessing
+- Compare:
+  - log-mel shape
+  - basic statistics
+  - numerical closeness
+
+Rationale:
+- Avoids committing WAV files to the repository.
+- Ensures preprocessing symmetry even without real audio.
+- Catches changes to gain, limiter, dtype, or log-mel geometry.
+
+Suggested location:
+- `tests/test_audio_parity.py`
+
+❌ Do NOT commit recorded WAV files for parity testing.
+
+---
+
 ## 7. Golden rule
 
 > **Recording is raw. Runtime defines truth. Training mirrors runtime.**

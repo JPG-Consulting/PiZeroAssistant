@@ -10,44 +10,47 @@ It captures the current state, decisions, and next steps so development can be r
 
 Offline-first voice assistant with:
 - Wake Word Detection (offline)
-- STT via configurable OpenAI-compatible API
-- LLM via configurable OpenAI-compatible API
-- TTS via configurable OpenAI-compatible API (Piper initially)
+- STT via configurable OpenAI-compatible API (planned; interfaces will exist here)
+- LLM via configurable OpenAI-compatible API (planned; interfaces will exist here)
+- TTS via configurable OpenAI-compatible API (planned; interfaces will exist here)
 
-NOTE: The OpenAI-compatible server on Raspberry Pi 5 is a **separate repository**.
+NOTE: External OpenAI-compatible servers (e.g., Raspberry Pi 5 services or Piper) are **separate repositories** and are out of scope for this repo.
 
 ---
 
-## Current focus
+## Current focus (blocking milestone)
 
-Phase 1 — Wake Word Detection (KWS)
+Phase 2 — Wake Word Detection (KWS)
 
-Status:
-- Training pipeline: stable
-- Feature parity: stable
-- ONNX export: opset 18, static batch=1
-- Runtime inference: functional, under validation
+KWS stability is the current blocking milestone. Runtime detection is implemented but still under validation.
+
+---
+
+## Phase status
+
+**Phase 1 — Voice Activity Detection (VAD)**
+- Energy-based VAD: implemented and tested
+- WebRTC VAD: implemented but not fully tested (not yet production-validated)
+
+**Phase 2 — Wake-Word Detection (KWS)** *(current focus)*
+- Training pipeline: implemented
+- Feature extraction parity: implemented (still under validation)
+- ONNX export: implemented (opset 18, static batch=1)
+- Runtime inference: implemented (under validation)
 - Threshold tuning: ongoing
-- WebRTC VAD: not fully tested
 
----
-
-## Next phases
-
-Phase 2: STT integration  
-Phase 3: LLM integration  
-Phase 4: TTS integration  
-
-All backends configurable via YAML.
+**Phase 3+ — STT → LLM → TTS** *(planned)*
+- STT/LLM/TTS backends are intended to be configurable and OpenAI-API-compatible.
+- Interfaces are planned or stubbed in this repo; production-grade backends live elsewhere.
 
 ---
 
 ## Documentation state
 
 - PROJECT_STATUS.md: current
+- docs/dev/01-architecture.md: current
+- docs/dev/02-audio-parity.md: current
 - docs/dev/03-wakeword-onnx-pipeline.md: current
-- docs/dev/01-architecture.md: TODO
-- docs/dev/02-audio-parity.md: TODO
 
 ---
 

@@ -322,8 +322,9 @@ def export_onnx(model: nn.Module, feature_cfg: FeatureConfig, output: Path):
         output,
         input_names=["logmel"],
         output_names=["prob"],
-        dynamic_axes={"logmel": {0: "batch"}, "prob": {0: "batch"}},
-        opset_version=11,
+        dynamic_axes=None,  # fixed-shape export (batch=1) keeps IR simple for embedded runtimes
+        opset_version=18,
+        do_constant_folding=True,
     )
     print(f"Exported ONNX model to {output}")
 

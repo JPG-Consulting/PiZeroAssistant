@@ -50,6 +50,7 @@ Each stage has clearly defined inputs, outputs, and invariants.
 - No resampling occurs at runtime
 
 The wake-word system relies on the raw acoustic characteristics of the deployment environment.
+Recording remains raw int16 PCM with no software gain or limiter applied.
 
 ---
 
@@ -75,10 +76,14 @@ The wake-word system relies on the raw acoustic characteristics of the deploymen
 - Convert raw audio into model-ready features
 
 **Behavior**
-- A deterministic feature extractor (e.g. log-mel spectrogram) is applied
+- Before feature extraction, a fixed, deterministic runtime preprocessing step applies a
+  non-adaptive software gain and a fixed soft limiter
+- A deterministic feature extractor (e.g. log-mel spectrogram) is then applied
 - Feature parameters are fixed and explicitly configured
 
 **Invariants**
+- Runtime preprocessing is configuration- and code-defined, not adaptive normalization or AGC
+- Training preprocessing mirrors runtime preprocessing exactly
 - Feature extraction used in training and runtime must be identical
 - No feature normalization or augmentation is applied at runtime
 - Feature shapes and scaling are stable and configuration-driven
@@ -198,6 +203,9 @@ Key principles:
 Dataset curation is intentionally conservative to preserve semantic correctness.
 
 ---
+
+For audio-parity invariants and the authoritative preprocessing reference, see
+`docs/audio_parity_checklist.md`.
 
 ## When Retraining Is Required
 

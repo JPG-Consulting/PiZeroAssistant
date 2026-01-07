@@ -124,30 +124,36 @@ Configuration values are grouped by **which pipeline stage they affect**, not by
 This mapping is **conceptual** and intended to clarify ownership and invariants.
 
 ### Audio Capture
-Typical configuration responsibilities:
-- Sample rate
-- Audio device selection
-- Channel configuration
+Configuration keys and responsibilities:
+- `audio.sample_rate`: defines the fixed capture sample rate
+- `audio.device`: selects the capture device identity
+- `audio.channels`: defines the channel count
+- `audio.dtype`: defines the raw sample format
+- `audio.block_ms`: sets the capture block timing granularity
 
 These settings define the raw audio format and must remain consistent between training and runtime.
 
 ---
 
 ### Framing and Buffering
-Typical configuration responsibilities:
-- Analysis window duration (`clip-sec`)
-- Buffering or hop behavior
+Configuration keys and responsibilities:
+- `features.clip_seconds`: defines the analysis window duration
+- `features.hop_ms`: defines the analysis window stride timing
+- `audio.block_ms`: defines the buffering cadence used to form windows
 
 These values define *when* inference happens, not *what* is inferred.
 
 ---
 
 ### Feature Extraction
-Typical configuration responsibilities:
-- FFT size and hop length
-- Number of mel bands
-- Frequency range
-- Log scaling behavior
+Configuration keys and responsibilities:
+- `features.n_fft`: defines FFT size
+- `features.win_ms`: defines analysis window length
+- `features.hop_ms`: defines feature frame hop
+- `features.n_mels`: defines mel band count
+- `features.fmin`: defines lower frequency bound
+- `features.fmax`: defines upper frequency bound
+- `features.log_eps`: defines log scaling floor
 
 All feature-related parameters must match exactly between:
 - offline dataset inspection
@@ -159,19 +165,21 @@ Any change in feature configuration constitutes a **pipeline change** and requir
 ---
 
 ### Model Inference
-Typical configuration responsibilities:
-- Model path or identifier
-- Input/output tensor expectations
+Configuration keys and responsibilities:
+- `wakeword.type`: selects the inference backend
+- `wakeword.model_path`: identifies the model artifact
+- `wakeword.input_name`: defines input tensor naming expectations
+- `wakeword.output_name`: defines output tensor naming expectations
 
 The model is treated as a black box with a stable input/output contract.
 
 ---
 
 ### Decision Logic
-Typical configuration responsibilities:
-- Wake probability threshold
-- Debounce or cooldown timing
-- Optional temporal smoothing parameters
+Configuration keys and responsibilities:
+- `wakeword.threshold`: defines the wake probability threshold
+- `wakeword.consecutive_hits`: defines the consecutive-hit requirement
+- `wakeword.cooldown_ms`: defines the post-trigger cooldown timing
 
 These settings affect user-facing behavior but must not influence training data or feature extraction.
 
@@ -188,6 +196,35 @@ Key principles:
 - Training data must reflect runtime conditions as closely as possible
 
 Dataset curation is intentionally conservative to preserve semantic correctness.
+
+---
+
+## When Retraining Is Required
+
+This checklist is a decision aid for determining whether a change requires retraining.
+
+**Retraining is required when:**
+- Feature extraction configuration changes (mel parameters, FFT size, frequency range)
+- Analysis window duration (`clip_seconds`) changes
+- Training data distribution shifts materially (new microphone, new acoustic domain)
+- The model architecture or output contract changes
+
+**Retraining is not required when:**
+- Decision logic parameters change (thresholds, debounce, cooldown)
+- Runtime-only policy behavior changes
+- Logging, metrics, or evaluation tooling changes
+
+---
+
+## Common Failure Modes
+
+These are system-level failure modes that arise when pipeline invariants are violated.
+
+- Feature mismatch between training and runtime (cause) leads to unstable or incorrect detections (symptom)
+- Overrepresentation of trivial negatives like silence (cause) yields poor real-world discrimination (symptom)
+- Dataset distribution drift (cause) reduces accuracy in deployment environments (symptom)
+- Over-tuning thresholds to compensate for poor data (cause) causes brittle wake behavior (symptom)
+- Treating wake-word detection as a policy problem instead of a modeling problem (cause) leads to inconsistent decisions (symptom)
 
 ---
 

@@ -49,6 +49,6 @@ This folder contains small utility scripts for preparing and evaluating wake-wor
   - When to use: Confirm tensor shapes/dtypes after export, especially when wiring the runtime inference pipeline.
 - **`make_dummy_wake_onnx.py`** – Creates a minimal ONNX model that outputs a constant wake probability for testing.
   - Arguments: none; outputs `dummy_wake.onnx`.
-  - When to use: Validate the inference path without a trained model; the script pins the ONNX IR version to **7** (compatible with constrained runtimes) and opset to 11 so it runs on older parsers or embedded devices.
+  - When to use: Validate the inference path without a trained model; the script pins the ONNX IR version to **7** (compatible with constrained runtimes) and opset to 11 so it runs on older parsers or embedded devices (legacy / dummy model example). The wake-word runtime contract uses opset 18.
 - **`training/`** – Self-contained training helpers for local machines or Google Colab.
   - `train_wakeword.py`: end-to-end trainer that mirrors the runtime feature extractor and exports an ONNX file with the expected `logmel` input and `prob` output. See `tools/training/README.md` for setup and dataset layout.

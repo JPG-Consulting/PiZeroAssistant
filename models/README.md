@@ -79,11 +79,11 @@ Your exported model must match the assistant’s feature extractor settings:
 - Window / hop: **25 ms / 10 ms**
 - Context window: **1.0 s**
 - Input tensor name: usually **`logmel`**
-- Input shape: **(1, 1, 40, 98)** `float32`
+- Input shape: **(1, 1, n_mels, frames)** `float32` where frames are derived from config
 - Output name: usually **`prob`**
 - Output shape: **(1, 1)** `float32` probability in `[0,1]`
 
-If these do not match, detection will fail or behave unpredictably.
+If these do not match, detection will fail or behave unpredictably. Frame counts must not be hardcoded.
 
 ---
 

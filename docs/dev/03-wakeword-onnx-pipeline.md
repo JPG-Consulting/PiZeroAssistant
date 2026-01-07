@@ -1,256 +1,84 @@
-# Wake-word ONNX Pipeline (Final)
+# Wake-word ONNX Pipeline (Current)
+This document describes the *contract*, not a step-by-step tutorial.
 
-This document describes the **canonical, end-to-end pipeline** used to build,
-validate, train, export, and deploy an **offline wake-word detector** using ONNX.
-
-It is designed to be:
-- Reproducible
-- Hardware-agnostic
-- Aligned with the current Google Colab training notebook
-
-No local machine–specific paths are assumed.
+The runtime code in `src/assistant` is authoritative; this document describes its wake-word build, export, and validation pipeline.
 
 ---
 
-## 1. Dataset Structure
+## Dataset
 
-The dataset **must** follow this structure:
-
-```
-dataset/
-├── wake/
-│   ├── wake_001.wav
-│   ├── wake_002.wav
-│   └── ...
-└── not_wake/
-    ├── noise_001.wav
-    ├── speech_001.wav
-    └── ...
-```
-
-All WAV files must be:
-- Mono
-- 16 kHz sample rate
-- PCM (`int16` or `float32`)
+- Directory layout (no nested classes):
+  ```
+  dataset/
+  ├── wake/
+  └── not_wake/
+  ```
+- Collect clips with `tools/record_wakeword.py` and `tools/make_clips.py`.
+- WAV requirements: mono, 16 kHz, **int16 PCM**. There is no normalization anywhere in the pipeline.
 
 ---
 
-## 2. WAV Validation
+## Recording (`tools/record_wakeword.py`)
 
-Before any training, validate WAV integrity:
-
-```bash
-python tools/validate_wavs.py path/to/dataset/wake
-python tools/validate_wavs.py path/to/dataset/not_wake
-```
-
-This checks:
-- WAV readability
-- Sample rate
-- Channel count
-
-No files should fail this step.
+- Captures raw int16 PCM from ALSA using the runtime device configuration.
+- Applies a short fade-in/out to avoid clicks; **no gain, limiter, or normalization** is applied while recording.
 
 ---
 
-## 3. RMS & Clipping Audit
+## Preprocessing parity
 
-Next, audit signal levels:
+### Runtime (`OnnxWakeWordDetector`)
+1. Read `int16` PCM from ALSA.
+2. Apply fixed 2.5× software gain.
+3. Apply tanh soft limiter around ±20000.
+4. Cast back to `int16`.
+5. Feed into `LogMelExtractor`.
 
-```bash
-python tools/audit_rms.py path/to/dataset/wake
-python tools/audit_rms.py path/to/dataset/not_wake
-```
-
-Files may be flagged as:
-- `LOW_RMS` (too quiet)
-- `HIGH_RMS`
-- `CLIPPING`
-
-Flagged files are automatically moved into a `_bad/` subfolder and **excluded**
-from training.
+### Training (`train_wakeword.py`)
+- Mirrors the runtime path exactly: int16 conversion → 2.5× gain → tanh limiter → `LogMelExtractor`.
+- Optional flags: `--no-limiter` (ablation only) and `--debug-logmel-shape`.
+- No RMS scaling or normalization at any stage.
 
 ---
 
-## 4. Preparing the Training ZIP
+## Features
 
-Create a ZIP archive containing the cleaned dataset.
-
-**Important rules**
-- The folder *inside the ZIP* must be named exactly `dataset/`
-- The ZIP filename itself is arbitrary
-
-Example:
-
-```bash
-zip -r dataset.zip dataset
-```
+- All geometry comes from `config/config.yaml` (sample rate, `n_fft`, `win_ms`, `hop_ms`, `n_mels`, `fmin`, `fmax`, `log_eps`, `clip_seconds`).
+- `clip_seconds` may be 1.0 or 2.0 depending on the config; frame counts are derived, not hardcoded.
 
 ---
 
-## 5. Google Colab Environment Setup
+## Model
 
-### 5.1 Install dependencies
-
-```python
-!pip -q install numpy==2.* torch torchvision torchaudio torchcodec onnx onnxruntime onnxscript tqdm
-```
-
-`torchcodec` is required and **must** be installed.
-
-### 5.2 Mount Google Drive
-
-```python
-from google.colab import drive
-drive.mount("/content/drive")
-```
+- Compact CNN (~80k parameters).
+- Expects input `(B, 1, n_mels, frames)` and produces logits internally.
+- Sigmoid is applied only in the ONNX export wrapper.
 
 ---
 
-## 6. Dataset Extraction in Colab
+## ONNX export
 
-```python
-import zipfile
-from pathlib import Path
-
-ZIP_PATH = Path("/content/drive/MyDrive/wakeword-training/dataset.zip")
-OUT_DIR  = Path("/content/dataset")
-
-assert ZIP_PATH.exists()
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-with zipfile.ZipFile(ZIP_PATH, "r") as z:
-    z.extractall(OUT_DIR)
-```
-
-The notebook **auto-detects** whether the dataset is located at:
-- `/content/dataset`
-- `/content/dataset/dataset`
+- Input name: `logmel`; output name: `prob`.
+- Shape: `(1, 1, n_mels, frames)` with **static batch = 1**.
+- `opset_version = 18`, `do_constant_folding = True`, no dynamic axes.
+- Exported output already includes sigmoid → probability in `[0, 1]`.
 
 ---
 
-## 7. Canonical Feature Parameters (DO NOT CHANGE)
+## Runtime contract
 
-These parameters **must match runtime**:
-
-- Sample rate: 16 kHz
-- Log-Mel features
-- 40 mel bins
-- 25 ms window
-- 10 ms hop
-- 1.0 s context
-- 98 frames
-
-Any mismatch will break inference.
+- Runtime consumes the exported probability directly and must **not** apply sigmoid again.
 
 ---
 
-## 8. Model Architecture
+## Threshold selection
 
-The model is a **TinyDSCNN-style binary classifier**:
-
-- Depthwise-separable convolutions
-- Global convolution over `(40 × 98)`
-- Single logit output
-
-The model outputs **logits**, not probabilities.
+- Choose thresholds from validation negatives; tune manually in `config/config.yaml`.
+- Training does not bake thresholds into the model.
 
 ---
 
-## 9. Training
+## Validation and golden tests
 
-Training uses:
-
-- `BCEWithLogitsLoss`
-- Strong class imbalance correction via `pos_weight`
-- Adam optimizer
-- Fixed-shape batches
-
-Validation loss is monitored; training can be stopped early if it plateaus.
-
----
-
-## 10. Threshold Selection
-
-After training, validation probabilities are analyzed:
-
-- Wake probabilities
-- Not-wake probabilities
-
-A **conservative threshold** is chosen:
-
-```
-threshold = max(neg_probs) × 1.2
-```
-
-This ensures near-zero false positives.
-
-Threshold selection is **explicitly separated** from training.
-
----
-
-## 11. ONNX Export
-
-The model is exported with:
-
-- Static input shape `(1, 1, 40, 98)`
-- `opset_version = 11` (ARM-safe)
-- Output name: `prob`
-
-The ONNX model outputs a **probability**, not logits.
-
-Both files must be preserved:
-- `wakeword.onnx`
-- `wakeword.onnx.data`
-
----
-
-## 12. Model Storage
-
-Exported models are stored in Google Drive:
-
-```
-MyDrive/
-└── wakeword-training/
-    ├── wakeword.onnx
-    └── wakeword.onnx.data
-```
-
-Only the ONNX artifacts are committed or deployed — **never training checkpoints**.
-
----
-
-## 13. Runtime Contract
-
-### Input
-
-```
-logmel: float32 (1, 1, 40, 98)
-```
-
-### Output
-
-```
-prob: float32 (1, 1)
-```
-
-The runtime **must not apply sigmoid** again.
-
----
-
-## 14. Golden Test Script
-
-A canonical script (`tools/gold_test_onnx.py`) is provided to validate the ONNX
-model on real WAV files **outside Colab**.
-
-This script is the final authority for model correctness.
-
----
-
-## 15. Final Notes
-
-- The repository defines the **interface**, not the trained weights
-- Training and deployment are strictly separated
-- Any future model must conform to this contract
-
-This document is the **single source of truth** for the wake-word pipeline.
+- `tools/gold_test_onnx.py` is the final authority for verifying exported models against the runtime contract.
+- Do not rely on Colab-only assumptions; tests must pass locally.

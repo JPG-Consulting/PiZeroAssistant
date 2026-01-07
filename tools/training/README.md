@@ -30,6 +30,8 @@ This folder contains everything needed to train a wake-word model that matches t
 
 ## Quick start (Google Colab)
 
+This section is Colab-specific and not part of the runtime contract.
+
 1. Bring your dataset into the Colab runtime so it follows the `wake/` and `not_wake/` folder convention:
    - **Upload a ZIP from your computer** (after upload, unpack it):
 
@@ -64,7 +66,9 @@ This folder contains everything needed to train a wake-word model that matches t
 
 - Uses the runtime `LogMelExtractor` to guarantee feature parity (16 kHz, 40 mel bins, 1 s window by default). The expected WAV format is 16-bit PCM mono recorded at 16 kHz (e.g., via `tools/record_wakeword.py` which shares the ALSA path with runtime; `arecord`-style PCM WAVs also work).
 - Applies the same software gain + tanh soft limiter used by the runtime wake-word detector so training features match deployment behavior.
-- Small CNN with ~80k parameters; exports to ONNX with input name `logmel`, output name `prob`, and default opset 11 for compatibility on Raspberry Pi/ONNXRuntime.
+- Small CNN with ~80k parameters; exports to ONNX with input name `logmel`, output name `prob`, and opset 18 (static batch=1 shapes) for compatibility with the runtime exporter in modern PyTorch/ONNXRuntime.
+  - The runtime uses `onnxruntime>=1.16` (see `requirements.txt`), which already supports opset 18 on CPU, so the exported wake-word model loads without conversion on the Pi.
+  - The assistant runtime performs single-frame inference only, so wake-word exports intentionally do not support batch sizes greater than 1.
 - Flags:
   - `--data-root`: required dataset path.
   - `--config`: optional YAML to mirror runtime feature settings (defaults to `config/config.yaml`).

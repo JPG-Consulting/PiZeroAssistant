@@ -29,6 +29,9 @@ from tqdm import tqdm
 # Local imports use the runtime feature extractor to ensure contract match
 from assistant.dsp import LogMelExtractor
 
+ONNX_INPUT_NAME = "logmel"
+ONNX_OUTPUT_NAME = "prob"
+
 
 @dataclass
 class FeatureConfig:
@@ -203,7 +206,7 @@ def build_dataloaders(
     augment: bool,
     apply_limiter: bool,
     debug_logmel_shape: bool,
-) -> Tuple[DataLoader, DataLoader]:
+) -> Tuple[DataLoader, DataLoader, int, int]:
     wake_files = sorted((data_root / "wake").rglob("*.wav"))
     neg_files = sorted((data_root / "not_wake").rglob("*.wav"))
     if not wake_files or not neg_files:
@@ -247,7 +250,7 @@ def build_dataloaders(
 
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(val_ds, batch_size=batch_size)
-    return train_dl, val_dl
+    return train_dl, val_dl, len(wake_files), len(neg_files)
 
 
 def train_epoch(model, dl, optim, criterion, device):
@@ -267,7 +270,7 @@ def train_epoch(model, dl, optim, criterion, device):
     return total / max(1, n)
 
 
-def evaluate(model, dl, criterion, device):
+def evaluate(model, dl, criterion, device, *, desc: str = "val"):
     model.eval()
     total = 0.0
     n = 0
@@ -275,7 +278,7 @@ def evaluate(model, dl, criterion, device):
     all_probs: List[torch.Tensor] = []
     all_labels: List[torch.Tensor] = []
     with torch.no_grad():
-        for xb, yb in tqdm(dl, desc="val", leave=False):
+        for xb, yb in tqdm(dl, desc=desc, leave=False):
             xb = xb.to(device)
             yb = yb.to(device)
             logits = model(xb)
@@ -293,6 +296,22 @@ def evaluate(model, dl, criterion, device):
         probs_cat = torch.tensor([])
         labels_cat = torch.tensor([])
     return total / max(1, n), correct / max(1, n), probs_cat, labels_cat
+
+
+def compute_prob_means(probs: torch.Tensor, labels: torch.Tensor) -> Tuple[float | None, float | None]:
+    if probs.numel() == 0:
+        return None, None
+    labels_np = labels.numpy().astype(int)
+    probs_np = probs.numpy().astype(float)
+    wake_probs = probs_np[labels_np == 1]
+    neg_probs = probs_np[labels_np == 0]
+    wake_mean = float(np.mean(wake_probs)) if wake_probs.size else None
+    neg_mean = float(np.mean(neg_probs)) if neg_probs.size else None
+    return wake_mean, neg_mean
+
+
+def format_prob(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.4f}"
 
 
 class SigmoidONNXWrapper(nn.Module):
@@ -320,8 +339,8 @@ def export_onnx(model: nn.Module, feature_cfg: FeatureConfig, output: Path):
         wrapper,
         dummy,
         output,
-        input_names=["logmel"],
-        output_names=["prob"],
+        input_names=[ONNX_INPUT_NAME],
+        output_names=[ONNX_OUTPUT_NAME],
         dynamic_axes=None,  # fixed-shape export (batch=1) keeps IR simple for embedded runtimes
         opset_version=18,
         do_constant_folding=True,
@@ -375,7 +394,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--val-split", type=float, default=0.2)
     p.add_argument("--lr", type=float, default=1e-3)
-    p.add_argument("--pos-weight", type=float, default=15.0, help="Positive class weight for class imbalance")
+    p.add_argument(
+        "--pos-weight",
+        type=float,
+        default=None,
+        help="Positive class weight for class imbalance (default: auto from dataset ratio)",
+    )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--no-augment", action="store_true", help="Disable random gain augmentation")
     p.add_argument(
@@ -392,6 +416,11 @@ def parse_args() -> argparse.Namespace:
         "--save-metadata",
         action="store_true",
         help="Save training metadata (config + git hash) alongside the exported ONNX",
+    )
+    p.add_argument(
+        "--log-prob-means",
+        action="store_true",
+        help="Log mean wake/non-wake probabilities each epoch (train + val) for diagnostics",
     )
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     return p.parse_args()
@@ -421,7 +450,7 @@ def main():
     feature_cfg = FeatureConfig.from_yaml(args.config)
     print("Loaded feature config:", feature_cfg)
 
-    train_dl, val_dl = build_dataloaders(
+    train_dl, val_dl, wake_count, neg_count = build_dataloaders(
         feature_cfg=feature_cfg,
         data_root=args.data_root,
         batch_size=args.batch_size,
@@ -433,6 +462,30 @@ def main():
     )
 
     device = torch.device(args.device)
+    if wake_count and neg_count:
+        ratio = wake_count / neg_count
+    else:
+        ratio = float("inf")
+    balanced = 0.8 <= ratio <= 1.25
+    logging.info("Dataset sizes: wake=%d non-wake=%d (ratio=%.2f)", wake_count, neg_count, ratio)
+    if args.pos_weight is None:
+        if balanced:
+            args.pos_weight = 1.0
+            logging.info("Balanced dataset detected; using pos_weight=1.0 (no class bias).")
+        else:
+            args.pos_weight = min(max(neg_count / wake_count, 1.0), 10.0)
+            logging.info("Auto pos_weight set to %.2f based on dataset ratio.", args.pos_weight)
+            if math.isclose(args.pos_weight, 10.0):
+                logging.warning(
+                    "pos_weight capped at 10.0; dataset may be severely imbalanced. "
+                    "Consider adding more wake samples or diverse negatives."
+                )
+    elif balanced and not math.isclose(args.pos_weight, 1.0):
+        logging.warning(
+            "Balanced dataset detected (~1:1) but --pos-weight is %.2f; "
+            "this can bias the model toward wake. Consider --pos-weight 1.0.",
+            args.pos_weight,
+        )
     model = SmallCNN().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     pos_weight = torch.tensor([args.pos_weight], device=device)
@@ -442,8 +495,20 @@ def main():
     for epoch in range(1, args.epochs + 1):
         print(f"\nEpoch {epoch}/{args.epochs}")
         train_loss = train_epoch(model, train_dl, optimizer, criterion, device)
-        val_loss, val_acc, _, _ = evaluate(model, val_dl, criterion, device)
+        val_loss, val_acc, val_probs, val_labels = evaluate(model, val_dl, criterion, device, desc="val")
         print(f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} val_acc={val_acc*100:.1f}%")
+        if args.log_prob_means:
+            _, _, train_probs, train_labels = evaluate(model, train_dl, criterion, device, desc="train")
+            train_wake_mean, train_neg_mean = compute_prob_means(train_probs, train_labels)
+            val_wake_mean, val_neg_mean = compute_prob_means(val_probs, val_labels)
+            print(
+                "prob_means train wake={} non_wake={} | val wake={} non_wake={}".format(
+                    format_prob(train_wake_mean),
+                    format_prob(train_neg_mean),
+                    format_prob(val_wake_mean),
+                    format_prob(val_neg_mean),
+                )
+            )
         if val_loss < best_val:
             best_val = val_loss
             export_onnx(model.cpu(), feature_cfg, args.output)

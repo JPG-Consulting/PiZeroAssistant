@@ -314,6 +314,53 @@ def format_prob(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.4f}"
 
 
+def update_collapse_streak(
+    wake_mean: float | None,
+    neg_mean: float | None,
+    *,
+    diff_threshold: float,
+    mean_threshold: float,
+    current_streak: int,
+) -> int:
+    if wake_mean is None or neg_mean is None:
+        return 0
+    mean_diff = abs(wake_mean - neg_mean)
+    if mean_diff < diff_threshold and wake_mean > mean_threshold and neg_mean > mean_threshold:
+        return current_streak + 1
+    return 0
+
+
+def warn_on_collapse(
+    epoch: int,
+    wake_mean: float | None,
+    neg_mean: float | None,
+    *,
+    diff_threshold: float,
+    mean_threshold: float,
+    consecutive_epochs: int,
+) -> None:
+    if wake_mean is None or neg_mean is None:
+        return
+    mean_diff = abs(wake_mean - neg_mean)
+    if mean_diff >= diff_threshold or wake_mean <= mean_threshold or neg_mean <= mean_threshold:
+        return
+    logging.warning(
+        (
+            "Training collapse suspected (epoch %d): wake_mean=%.4f non_wake_mean=%.4f diff=%.4f "
+            "for %d consecutive epochs. The model is assigning similarly high probabilities to both "
+            "classes, which often means it is not separating wake vs non-wake. Likely causes include "
+            "a dataset that is too small or homogeneous, insufficient negative diversity, severe class "
+            "imbalance, or overly strong class weighting (pos_weight). Next steps: add diverse negatives, "
+            "add near-miss negatives, reduce pos_weight, and inspect dataset balance."
+        ),
+        epoch,
+        wake_mean,
+        neg_mean,
+        mean_diff,
+        consecutive_epochs,
+    )
+
+
 class SigmoidONNXWrapper(nn.Module):
     """Applies sigmoid for export so the runtime sees probabilities."""
 
@@ -492,15 +539,35 @@ def main():
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     best_val = float("inf")
+    collapse_streak = 0
+    collapse_diff_threshold = 0.02
+    collapse_mean_threshold = 0.8
+    collapse_epochs = 3
     for epoch in range(1, args.epochs + 1):
         print(f"\nEpoch {epoch}/{args.epochs}")
         train_loss = train_epoch(model, train_dl, optimizer, criterion, device)
         val_loss, val_acc, val_probs, val_labels = evaluate(model, val_dl, criterion, device, desc="val")
         print(f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} val_acc={val_acc*100:.1f}%")
+        val_wake_mean, val_neg_mean = compute_prob_means(val_probs, val_labels)
+        collapse_streak = update_collapse_streak(
+            val_wake_mean,
+            val_neg_mean,
+            diff_threshold=collapse_diff_threshold,
+            mean_threshold=collapse_mean_threshold,
+            current_streak=collapse_streak,
+        )
+        if collapse_streak == collapse_epochs:
+            warn_on_collapse(
+                epoch,
+                val_wake_mean,
+                val_neg_mean,
+                diff_threshold=collapse_diff_threshold,
+                mean_threshold=collapse_mean_threshold,
+                consecutive_epochs=collapse_epochs,
+            )
         if args.log_prob_means:
             _, _, train_probs, train_labels = evaluate(model, train_dl, criterion, device, desc="train")
             train_wake_mean, train_neg_mean = compute_prob_means(train_probs, train_labels)
-            val_wake_mean, val_neg_mean = compute_prob_means(val_probs, val_labels)
             print(
                 "prob_means train wake={} non_wake={} | val wake={} non_wake={}".format(
                     format_prob(train_wake_mean),

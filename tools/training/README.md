@@ -90,6 +90,7 @@ This section is Colab-specific and not part of the runtime contract.
   - `--save-metadata`: store a small JSON next to the ONNX export with config and git hash for reproducibility.
   - `--log-prob-means`: print mean wake/non-wake probabilities each epoch for quick collapse diagnostics.
 - Audio safety checks: the loader logs warnings if clips look clipped or extremely quiet to help avoid distribution shifts.
+- Diagnostic-only warning: the trainer may warn about possible "training collapse," which means it is giving similar confidence to both wake and non-wake audio; this can lead to unreliable wake-word detection and is often caused by too little data, not enough negative variety, dataset imbalance, or over-weighting the positive class. This is only a warning (training continues and the ONNX model is still exported) but it is a signal to review your dataset and settings—add more diverse or near-miss negatives, check class balance, and consider reducing `pos_weight`.
 - After training, the script prints wake/non-wake probability stats and a suggested threshold (99.9th percentile of negatives) to guide manual tuning in `config/config.yaml`.
 - Saves the best validation-loss checkpoint directly to ONNX after each epoch.
 

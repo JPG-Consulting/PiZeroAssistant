@@ -1,6 +1,6 @@
 # Wake-word training (local or Colab)
 
-This folder contains everything needed to train a wake-word model that matches the runtime contract in `src/assistant`. The same script works on a laptop or in Google Colab; the only requirement is a dataset shaped like:
+This folder contains everything needed to train a wake-word model that matches the runtime contract in `src/assistant`. The training task is **binary**: detect your wake word versus **everything else**, not classify multiple specific words. The same script works on a laptop or in Google Colab; the only requirement is a dataset shaped like:
 
 ```
 <data-root>/
@@ -49,6 +49,17 @@ This section is Colab-specific and not part of the runtime contract.
      !unzip -q /content/drive/MyDrive/dataset.zip -d data/kws
      ```
 
+   - **Optional sanity check (not training)**: print a few WAV stats to verify sample rate, shape, and amplitude range. This does **not** alter the dataset or affect training; it just helps confirm clips look healthy before you start.
+
+     ```python
+     import soundfile as sf
+     from pathlib import Path
+
+     for p in list(Path("data/kws/wake").glob("*.wav"))[:3]:
+         x, sr = sf.read(p, dtype="float32")
+         print(p, "sr=", sr, "shape=", x.shape, "min/max=", x.min(), x.max())
+     ```
+
 2. Clone this repository in a Colab cell and install the training extras:
 
    ```bash
@@ -73,10 +84,11 @@ This section is Colab-specific and not part of the runtime contract.
   - `--data-root`: required dataset path.
   - `--config`: optional YAML to mirror runtime feature settings (defaults to `config/config.yaml`).
   - `--output`: destination ONNX path (defaults to `models/wakeword.onnx`).
-  - `--epochs`, `--batch-size`, `--lr`, `--val-split`, `--pos-weight`, `--seed`, `--device`, `--no-augment`: tune training without editing code.
+  - `--epochs`, `--batch-size`, `--lr`, `--val-split`, `--pos-weight` (defaults to dataset ratio), `--seed`, `--device`, `--no-augment`: tune training without editing code.
   - `--no-limiter`: ablation/diagnostic flag that removes the tanh soft limiter (keeps 2.5× gain). Default matches runtime.
   - `--debug-logmel-shape`: assert the extracted log-mel shapes match `(1, n_mels, frames)` for every sample.
   - `--save-metadata`: store a small JSON next to the ONNX export with config and git hash for reproducibility.
+  - `--log-prob-means`: print mean wake/non-wake probabilities each epoch for quick collapse diagnostics.
 - Audio safety checks: the loader logs warnings if clips look clipped or extremely quiet to help avoid distribution shifts.
 - After training, the script prints wake/non-wake probability stats and a suggested threshold (99.9th percentile of negatives) to guide manual tuning in `config/config.yaml`.
 - Saves the best validation-loss checkpoint directly to ONNX after each epoch.
@@ -90,6 +102,8 @@ This section is Colab-specific and not part of the runtime contract.
 
 ## Tips for better results
 
+- Remember: this is **wake-word vs everything else**, not "Jarvis vs Alexa." Include a diverse negative set with random words, silence, and background speech so the model learns general non-wake patterns.
+- Add near-miss negatives ("Jervis", "Harvis", etc.) to harden against false triggers that sound close to the wake word.
 - Use `tools/record_wakeword.py` and `tools/make_clips.py` to gather consistent, balanced clips.
 - Keep `clip_seconds` in your dataset aligned with `config/config.yaml` (1.0 s by default). The script pads/trims automatically but matching lengths reduces artifacts.
 - Start with a generous negative set (background speech/noise) to reduce false positives, then fine-tune the `wakeword.threshold` in `config/config.yaml` after deployment.

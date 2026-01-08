@@ -24,6 +24,9 @@ class WebrtcVADConfig:
 class EnergyVADConfig:
     rms_threshold: float
     hangover_ms: int
+    start_frames: int
+    noise_alpha: float
+    noise_factor: float
 
 
 @dataclass(frozen=True)
@@ -122,6 +125,9 @@ def load_config(path: str | Path) -> AppConfig:
             energy=EnergyVADConfig(
                 rms_threshold=float(vad.get("energy", {}).get("rms_threshold", 0.015)),
                 hangover_ms=int(vad.get("energy", {}).get("hangover_ms", 200)),
+                start_frames=int(vad.get("energy", {}).get("start_frames", 1)),
+                noise_alpha=float(vad.get("energy", {}).get("noise_alpha", 0.02)),
+                noise_factor=float(vad.get("energy", {}).get("noise_factor", 2.5)),
             ),
         ),
         features=FeatureConfig(

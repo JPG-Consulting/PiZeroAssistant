@@ -97,8 +97,19 @@ def main():
 
             # VAD on the current block
             speech = vad_is_speech(fr.pcm16)
+            if speech:
+                log.debug(
+                    "[WAKE_TRACE] vad_speech_frame ts=%.6f mono=%.6f",
+                    fr.timestamp,
+                    time.monotonic(),
+                )
 
             # Wake-word detection
+            if speech:
+                log.debug(
+                    "[WAKE_TRACE] inference_call_time mono=%.6f",
+                    time.monotonic(),
+                )
             wake_triggered = wake_detector.process_frame(speech)
 
             if wake_triggered:

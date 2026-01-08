@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 import numpy as np
 import onnxruntime as ort
@@ -39,6 +40,8 @@ class OnnxWakeWordDetector:
 
         self._hit_count = 0
         self._last_trigger = 0.0
+        self._sample_rate = audio_cfg.sample_rate
+        self._log = logging.getLogger("assistant.wakeword.onnx")
 
         # Feature extractor
         self.feats = LogMelExtractor(
@@ -78,7 +81,28 @@ class OnnxWakeWordDetector:
             self.metrics.on_suppressed()
             return False
 
+        inference_start_wall = time.time()
+        inference_start_mono = time.monotonic()
+        self._log.debug(
+            "[WAKE_TRACE] inference_start wall=%.6f mono=%.6f",
+            inference_start_wall,
+            inference_start_mono,
+        )
+
         samples = self._get_audio_samples(self.feats.num_samples)
+        window_end_wall = time.time()
+        window_end_mono = time.monotonic()
+        window_duration = self.feats.num_samples / float(self._sample_rate)
+        window_start_wall = window_end_wall - window_duration
+        window_start_mono = window_end_mono - window_duration
+        self._log.debug(
+            "[WAKE_TRACE] audio_window wall=%.6f..%.6f mono=%.6f..%.6f samples=%d",
+            window_start_wall,
+            window_end_wall,
+            window_start_mono,
+            window_end_mono,
+            self.feats.num_samples,
+        )
 
         # -------------------------------------------------
         # Software gain control (STABLE, deterministic)

@@ -52,6 +52,10 @@ This folder contains small utility scripts for preparing and evaluating wake-wor
 - **`gold_test_onnx.py`** – Runs a WAV file through the wake-word ONNX model to inspect the output probability.
   - Arguments: `wav` (1 s clip), `--model` (ONNX path, default `wakeword.onnx`).
   - When to use: Smoke-test a trained model with known wake/non-wake audio and compare probabilities to expectations.
+- **`capture_inference_window.py`** – Captures the exact runtime inference window from the ALSA mic path, saves it to disk, and evaluates it through the ONNX model with and without runtime preprocessing.
+  - Arguments: `--config` (YAML config file, default `config/config.yaml`), `--model` (optional ONNX path override), `--outdir` (output folder), `--max-windows` (capture count), `--cooldown-sec` (seconds between captures), `--no-vad` (capture every second without VAD).
+  - When to use: Debug real-time wake-word inference by saving the exact audio window used for predictions and comparing raw vs runtime-preprocessed model outputs.
+  - Example: `PYTHONPATH=src python tools/capture_inference_window.py --max-windows 5 --outdir debug_windows`
 - **`inspect_onnx.py`** – Prints input and output tensor metadata for an ONNX model.
   - Arguments: `model` (ONNX path).
   - When to use: Confirm tensor shapes/dtypes after export, especially when wiring the runtime inference pipeline.

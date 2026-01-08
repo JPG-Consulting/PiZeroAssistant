@@ -8,6 +8,13 @@ from assistant.dsp import LogMelExtractor
 from assistant.wakeword.metrics import WakeWordMetrics
 
 
+def runtime_preprocess(samples: np.ndarray) -> np.ndarray:
+    samples = samples.astype(np.float32)
+    samples *= 2.5
+    samples = np.tanh(samples / 20000.0) * 20000.0
+    return samples.astype(np.int16)
+
+
 class OnnxWakeWordDetector:
     def __init__(
         self,
@@ -76,13 +83,7 @@ class OnnxWakeWordDetector:
         # -------------------------------------------------
         # Software gain control (STABLE, deterministic)
         # -------------------------------------------------
-        samples = samples.astype(np.float32)
-
-        # Soft limiter to avoid hard clipping (CRITICAL)
-        samples *= 2.5
-        samples = np.tanh(samples / 20000.0) * 20000.0
-
-        samples = samples.astype(np.int16)
+        samples = runtime_preprocess(samples)
 
         print(
             "samples stats:",
@@ -134,4 +135,3 @@ class OnnxWakeWordDetector:
         print(f"[WAKE] prob={prob:.6f}")
 
         return prob
-

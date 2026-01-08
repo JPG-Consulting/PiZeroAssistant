@@ -9,6 +9,7 @@ from pathlib import Path
 
 from assistant.config import load_config
 from assistant.dsp import LogMelExtractor
+from assistant.wakeword.onnx_detector import runtime_preprocess
 
 
 def main():
@@ -27,6 +28,11 @@ def main():
         type=Path,
         default=Path("config/config.yaml"),
         help="Path to YAML config (default: config/config.yaml)",
+    )
+    ap.add_argument(
+        "--runtime-preprocess",
+        action="store_true",
+        help="Apply runtime software gain + soft limiter before feature extraction",
     )
     args = ap.parse_args()
 
@@ -50,6 +56,28 @@ def main():
     wav = wav[:num_samples]
     if len(wav) < num_samples:
         wav = np.pad(wav, (0, num_samples - len(wav)))
+
+    print(f"runtime_preprocess: {'ON' if args.runtime_preprocess else 'OFF'}")
+    if args.runtime_preprocess:
+        print(
+            "preprocess before:",
+            "peak=",
+            int(np.max(np.abs(wav))),
+            "min=",
+            int(wav.min()),
+            "max=",
+            int(wav.max()),
+        )
+        wav = runtime_preprocess(wav)
+        print(
+            "preprocess after :",
+            "peak=",
+            int(np.max(np.abs(wav))),
+            "min=",
+            int(wav.min()),
+            "max=",
+            int(wav.max()),
+        )
 
     # -----------------------------
     # Feature extraction (MUST match runtime)

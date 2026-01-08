@@ -18,6 +18,9 @@ This folder contains small utility scripts for preparing and evaluating wake-wor
 - **`audit_rms.py`** – Audits a folder of WAV files for RMS/peak levels, optionally moving bad files into a `_bad` subfolder.
   - Arguments: `folder` (path to `.wav` files), `--rms-min`/`--rms-max` (acceptable RMS window, defaults `0.008–0.20`), `--peak-max` (clipping threshold, default `0.99`), `--move-bad` (flag to relocate offenders).
   - When to use: Quickly check incoming recordings for inconsistent levels or clipping before further processing; the thresholds help catch quiet wake words or overdriven negatives.
+- **`analyze_wakeword_alignment.py`** – Computes RMS-based energy centroids per frame to measure where wake-word energy falls within each fixed-length clip.
+  - Arguments: `folder` (path to `.wav` files), `--sample-rate` (expected sample rate, default `16000`), `--hop-ms` (frame hop in ms, default `10`), `--verbose` (print per-file centroids).
+  - When to use: Diagnose temporal alignment bias (e.g., right-aligned wake words) by inspecting energy centroid positions without altering audio or running speech models.
 - **`inspect_logmel.py`** – Extracts log-mel features for a directory of WAV files and reports dataset-wide statistics.
   - Arguments: `root` (search root for `.wav` files), `--config` (YAML config file, default `config/config.yaml`).
   - When to use: Compare dataset log-mel distributions against runtime expectations using the same `LogMelExtractor` parameters.

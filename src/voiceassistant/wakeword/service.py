@@ -5,6 +5,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
@@ -46,6 +47,18 @@ class WakewordService:
     ) -> None:
         if Model is None:
             raise RuntimeError("openwakeword is not installed")
+        model_file = Path(model_path)
+        if not model_file.is_file():
+            logger.error("Wakeword model file not found: %s", model_path)
+            raise FileNotFoundError(f"Wakeword model file not found: {model_path}")
+        if model_file.suffix.lower() not in {".onnx", ".tflite"}:
+            logger.error(
+                "Unsupported wakeword model format: %s (expected .onnx or .tflite)",
+                model_file.suffix,
+            )
+            raise ValueError(
+                f"Unsupported wakeword model format: {model_file.suffix} (expected .onnx or .tflite)"
+            )
         self.sample_rate_hz = sample_rate_hz
         self.frame_duration_ms = frame_duration_ms
         self.inference_window_ms = inference_window_ms

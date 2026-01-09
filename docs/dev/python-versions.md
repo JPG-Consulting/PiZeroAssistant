@@ -2,11 +2,11 @@
 
 ## Overview
 
-Pi Zero Voice Assistant currently requires **Python 3.11** due to dependency constraints in `openwakeword>=0.5.0`. This is a platform constraint, not a preference. The guidance below explains the supported versions and how to install Python 3.11 safely when needed.
+Pi Zero Voice Assistant currently requires **Python 3.11** due to dependency constraints in `openwakeword==0.5.1`. This is a platform constraint, not a preference. The guidance below explains the supported versions and how to install Python 3.11 safely when needed.
 
 ## openWakeWord and Python compatibility
 
-- `openwakeword>=0.5.0` supports Python 3.11.
+- `openwakeword==0.5.1` supports Python 3.11.
 - Python 3.13 is not supported by `openwakeword` at this time.
 
 ## Raspberry Pi OS Python versions
@@ -16,7 +16,7 @@ Pi Zero Voice Assistant currently requires **Python 3.11** due to dependency con
 
 ## Why Python 3.11 is required today
 
-The wakeword service uses `openwakeword>=0.5.0`. Until `openwakeword` officially supports Python 3.13, the assistant must run on Python 3.11 to ensure reliable wakeword detection and package compatibility.
+The wakeword service uses `openwakeword==0.5.1`. Until `openwakeword` officially supports Python 3.13, the assistant must run on Python 3.11 to ensure reliable wakeword detection and package compatibility.
 
 ## Installing Python 3.11 on Raspberry Pi OS Trixie
 

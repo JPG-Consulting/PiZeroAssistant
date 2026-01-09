@@ -24,6 +24,15 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 - A fixed-size pre-roll buffer is maintained via a ring buffer (default 400 ms). Pre-roll is emitted as part of the wake event payload.
 - Wakeword detection applies a cooldown to prevent repeated triggers.
 
+### Wake-word model formats and selection
+
+- Supported formats: `.onnx` and `.tflite`.
+- The backend is selected by file extension (`.onnx` → ONNXRuntime, `.tflite` → TFLite).
+- No auto-conversion, runtime downloading, or training logic exists in the runtime.
+- A wake-word model must be present at startup, and the model format must match openWakeWord expectations.
+- Model loading happens once at wakeword service initialization, not per frame.
+- The wake-word service fails fast with a clear error when the model path is missing or misconfigured.
+
 ## Provider routing
 
 - Providers are configured in ordered lists (`stt_providers`, `llm_providers`, `tts_providers`).
@@ -99,4 +108,17 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 
 ### Python version requirements
 
-Python 3.11 is required because `openwakeword>=0.5.0` only supports Python 3.11 today. Raspberry Pi OS Bookworm ships with Python 3.11, while Raspberry Pi OS Trixie ships with Python 3.13 and requires a separate Python 3.11 install. See `docs/dev/python-versions.md` for platform details and installation guidance.
+Python 3.11 is required because `openwakeword==0.5.1` only supports Python 3.11 today. Raspberry Pi OS Bookworm ships with Python 3.11, while Raspberry Pi OS Trixie ships with Python 3.13 and requires a separate Python 3.11 install. See `docs/dev/python-versions.md` for platform details and installation guidance.
+
+## Platform support policy
+
+This project intentionally targets a narrow, explicitly supported set of platforms. The primary supported environment is Raspberry Pi Zero / Zero 2 running Raspberry Pi OS (Bookworm or Trixie). Python versions are explicitly documented and constrained, and dependency compatibility (for example, openWakeWord) can dictate the supported platform and Python requirements.
+
+Support is intentional, not universal. Other platforms may work, but they are not guaranteed. Platform changes are handled deliberately and documented when support is added or removed.
+
+Non-goals:
+
+- Support for all Python versions.
+- Support for all Linux distributions.
+- Support for arbitrary hardware.
+- Backward compatibility with deprecated platforms.

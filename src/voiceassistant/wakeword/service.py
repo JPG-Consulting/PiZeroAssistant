@@ -51,13 +51,30 @@ class WakewordService:
         if not model_file.is_file():
             logger.error("Wakeword model file not found: %s", model_path)
             raise FileNotFoundError(f"Wakeword model file not found: {model_path}")
-        if model_file.suffix.lower() not in {".onnx", ".tflite"}:
+        model_suffix = model_file.suffix.lower()
+        if model_suffix not in {".onnx", ".tflite"}:
             logger.error(
                 "Unsupported wakeword model format: %s (expected .onnx or .tflite)",
-                model_file.suffix,
+                model_suffix,
             )
             raise ValueError(
-                f"Unsupported wakeword model format: {model_file.suffix} (expected .onnx or .tflite)"
+                f"Unsupported wakeword model format: {model_suffix} (expected .onnx or .tflite)"
+            )
+        backend = "onnx" if model_suffix == ".onnx" else "tflite"
+        logger.info(
+            "Wakeword model resolved: path=%s suffix=%s backend=%s",
+            model_path,
+            model_suffix,
+            backend,
+        )
+        if (backend == "onnx" and model_suffix != ".onnx") or (
+            backend == "tflite" and model_suffix != ".tflite"
+        ):
+            raise ValueError(
+                "Wakeword configuration error:\n"
+                f"backend='{backend}' but model='{model_path}'\n\n"
+                "The wakeword backend and model format must match.\n"
+                "Use a .tflite model for the TFLite backend or switch the backend to ONNX."
             )
         self.sample_rate_hz = sample_rate_hz
         self.frame_duration_ms = frame_duration_ms
@@ -67,7 +84,7 @@ class WakewordService:
         self._input_queue = input_queue
         self._event_queue = event_queue
         self._vad = webrtcvad.Vad(vad_mode)
-        self._model = Model(wakeword_models=[model_path])
+        self._model = Model(wakeword_models=[model_path], inference_framework=backend)
         self._thread = threading.Thread(target=self._run, name="Wakeword", daemon=True)
         self._running = threading.Event()
         self._last_wake_ts = 0.0

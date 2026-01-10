@@ -33,6 +33,25 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 - Model loading happens once at wakeword service initialization, not per frame.
 - The wake-word service fails fast with a clear error when the model path is missing or misconfigured.
 
+### Wakeword backend and model compatibility
+
+The wakeword backend and model format must match exactly. This is a hard invariant enforced during initialization.
+Backend selection is explicit and controlled by this project, and startup fails if the backend/model pairing is invalid.
+
+Valid combinations:
+
+- `tflite` backend → `.tflite` model
+- `onnx` backend → `.onnx` model
+
+openWakeWord supports multiple inference runtimes, but automatic backend detection is intentionally avoided.
+Deterministic behavior is required on embedded systems, and silent fallback would hide performance and correctness issues.
+
+If the invariant is violated, startup fails early with an explicit, user-actionable error, and the assistant never
+enters the idle listening state. This is by design.
+
+On Raspberry Pi Zero / Zero 2, TFLite is recommended for performance and footprint. ONNX is supported but heavier,
+so the backend choice remains an explicit trade-off.
+
 ## Provider routing
 
 - Providers are configured in ordered lists (`stt_providers`, `llm_providers`, `tts_providers`).

@@ -15,6 +15,7 @@ from voiceassistant.config import AppConfig
 from voiceassistant.llm.prompts import RESET_ACK_TEXT, SYSTEM_PROMPT
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import LLMRequest, ProviderError
+from voiceassistant.providers.http import TTSResponse
 from voiceassistant.providers.factory import (
     build_llm_provider,
     build_stt_provider,
@@ -139,7 +140,7 @@ class AssistantStateMachine:
                 reply = self._run_llm(messages)
                 self._conversation_memory.add_assistant(reply)
                 self._conversation_memory.persist_if_enabled()
-            wav_bytes = self._run_tts(reply)
+            tts_response = self._run_tts(reply)
         except ProviderError:
             logger.exception("Provider error in pipeline")
             self._state = AssistantState.IDLE
@@ -150,7 +151,12 @@ class AssistantStateMachine:
             return
 
         self._state = AssistantState.TTS
-        self._playback.play(PlaybackRequest(wav_bytes=wav_bytes))
+        self._playback.play(
+            PlaybackRequest(
+                wav_bytes=tts_response.wav_bytes,
+                audio=tts_response.audio,
+            )
+        )
         self._monitor_playback()
         self._state = AssistantState.IDLE
 
@@ -171,11 +177,11 @@ class AssistantStateMachine:
         logger.info("LLM complete via %s", provider_name)
         return response.text
 
-    def _run_tts(self, text: str) -> bytes:
+    def _run_tts(self, text: str) -> TTSResponse:
         self._state = AssistantState.TTS
         response, provider_name = self._tts_router.call(lambda provider: provider.synthesize(text))
         logger.info("TTS complete via %s", provider_name)
-        return response.wav_bytes
+        return response
 
     def _build_wav_bytes(self, result: RecordingResult) -> bytes:
         buffer = io.BytesIO()

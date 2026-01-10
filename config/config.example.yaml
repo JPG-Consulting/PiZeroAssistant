@@ -54,6 +54,13 @@ routing:
       api_key_env: "TTS_API_KEY"
       max_failures: 2
       cooldown_s: 60
+    # - name: "lan-tts"
+    #   provider_type: "lan_http"
+    #   endpoint: "http://<lan-ip>/v1"
+    #   timeout_s: 20
+    #   api_key_env: null
+    #   max_failures: 2
+    #   cooldown_s: 60
 logging:
   level: "INFO"
   module_levels:

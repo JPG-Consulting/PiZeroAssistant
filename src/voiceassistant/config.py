@@ -90,7 +90,7 @@ class ConfigError(ValueError):
 SUPPORTED_PROVIDER_TYPES = {
     "stt": {"http", "lan_http"},
     "llm": {"http", "local_echo"},
-    "tts": {"http"},
+    "tts": {"http", "lan_http"},
 }
 
 STT_AUDIO_FORMATS = {"wav", "opus", "mp3"}

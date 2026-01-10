@@ -6,6 +6,7 @@ from voiceassistant.config import ConfigError, ProviderConfig, resolve_api_key
 from voiceassistant.providers.echo_llm import LocalEchoLLMProvider
 from voiceassistant.providers.http import HttpLLMProvider, HttpSTTProvider, HttpTTSProvider
 from voiceassistant.providers.lan_stt import LanHttpSTTProvider
+from voiceassistant.providers.lan_tts import LanHttpTTSProvider
 from voiceassistant.providers.llm import LLMProvider
 from voiceassistant.providers.stt import STTProvider
 
@@ -50,6 +51,13 @@ def build_llm_provider(config: ProviderConfig) -> LLMProvider:
 def build_tts_provider(config: ProviderConfig) -> HttpTTSProvider:
     if config.provider_type == "http":
         return HttpTTSProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+        )
+    if config.provider_type == "lan_http":
+        return LanHttpTTSProvider(
             name=config.name,
             endpoint=config.endpoint,
             timeout_s=config.timeout_s,

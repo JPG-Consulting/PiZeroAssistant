@@ -61,3 +61,16 @@ PYTHONPATH=src python -m voiceassistant.main --config config/config.yaml
 ```
 
 Advanced users can optionally install the project in editable mode to avoid setting `PYTHONPATH`, but it is not required to get started.
+
+## Optional conversation memory persistence
+
+Conversation memory is in-memory by default. To enable local persistence, set:
+
+```yaml
+conversation:
+  persistence:
+    enabled: true
+    path: "/var/lib/voiceassistant/conversation.json"
+```
+
+The file is stored locally on disk at the configured path and is never transmitted. To disable persistence, set `conversation.persistence.enabled` back to `false` (or remove the stanza). When disabled, no disk I/O occurs for conversation history.

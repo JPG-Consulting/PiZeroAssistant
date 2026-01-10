@@ -55,11 +55,28 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
+class ConversationPersistenceConfig:
+    enabled: bool
+    path: Optional[str]
+
+
+@dataclass(frozen=True)
+class ConversationConfig:
+    enabled: bool
+    max_turns: int
+    max_chars: int
+    reset_after_idle_s: int
+    reset_commands: List[str]
+    persistence: ConversationPersistenceConfig
+
+
+@dataclass(frozen=True)
 class AppConfig:
     audio: AudioConfig
     wakeword: WakewordConfig
     routing: RoutingConfig
     logging: LoggingConfig
+    conversation: ConversationConfig
     wake_beep_path: Optional[str]
     record_output_path: str
 
@@ -98,6 +115,18 @@ def load_config(path: str) -> AppConfig:
     wakeword = raw.get("wakeword", {})
     routing = raw.get("routing", {})
     logging_cfg = raw.get("logging", {})
+    conversation = raw.get("conversation", {})
+    persistence = conversation.get("persistence", {})
+    persistence_enabled = bool(persistence.get("enabled", False))
+    persistence_path = persistence.get("path")
+    if persistence_enabled and not persistence_path:
+        raise ConfigError("conversation.persistence.path is required when persistence is enabled")
+
+    raw_reset_commands = conversation.get(
+        "reset_commands",
+        ["reset conversation", "forget this", "clear memory"],
+    )
+    reset_commands = [str(command) for command in raw_reset_commands]
 
     config = AppConfig(
         audio=AudioConfig(
@@ -126,6 +155,17 @@ def load_config(path: str) -> AppConfig:
             level=str(logging_cfg.get("level", "INFO")),
             module_levels=dict(logging_cfg.get("module_levels", {})),
         ),
+        conversation=ConversationConfig(
+            enabled=bool(conversation.get("enabled", True)),
+            max_turns=int(conversation.get("max_turns", 6)),
+            max_chars=int(conversation.get("max_chars", 4000)),
+            reset_after_idle_s=int(conversation.get("reset_after_idle_s", 300)),
+            reset_commands=reset_commands,
+            persistence=ConversationPersistenceConfig(
+                enabled=persistence_enabled,
+                path=str(persistence_path) if persistence_path is not None else None,
+            ),
+        ),
         wake_beep_path=raw.get("wake_beep_path"),
         record_output_path=str(raw.get("record_output_path", "/tmp/last_command.wav")),
     )
@@ -136,6 +176,12 @@ def load_config(path: str) -> AppConfig:
         raise ConfigError("audio.sample_rate_hz must be 16000 Hz for openWakeWord")
     if config.wakeword.inference_window_ms < 25:
         raise ConfigError("wakeword.inference_window_ms must be >= 25 ms")
+    if config.conversation.max_turns < 0:
+        raise ConfigError("conversation.max_turns must be >= 0")
+    if config.conversation.max_chars < 0:
+        raise ConfigError("conversation.max_chars must be >= 0")
+    if config.conversation.reset_after_idle_s < 0:
+        raise ConfigError("conversation.reset_after_idle_s must be >= 0")
 
     return config
 

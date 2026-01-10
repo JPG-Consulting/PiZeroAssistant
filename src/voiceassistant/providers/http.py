@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 
 from voiceassistant.logging_config import get_logger
-from voiceassistant.providers.base import Provider, ProviderError
+from voiceassistant.providers.base import LLMRequest, Provider, ProviderError
 
 logger = get_logger(__name__)
 
@@ -63,8 +63,8 @@ class HttpSTTProvider(HttpProvider):
 
 
 class HttpLLMProvider(HttpProvider):
-    def complete(self, prompt: str) -> LLMResponse:
-        payload = {"prompt": prompt}
+    def complete(self, req: LLMRequest) -> LLMResponse:
+        payload = {"messages": req.messages}
         try:
             resp = requests.post(
                 self.endpoint,

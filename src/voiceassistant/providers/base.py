@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+@dataclass(frozen=True)
+class LLMRequest:
+    messages: list[dict]
+
+
 @dataclass
 class ProviderHealth:
     failures: int = 0

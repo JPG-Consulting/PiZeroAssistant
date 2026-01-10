@@ -89,7 +89,7 @@ class ConfigError(ValueError):
 
 SUPPORTED_PROVIDER_TYPES = {
     "stt": {"http", "lan_http"},
-    "llm": {"http"},
+    "llm": {"http", "local_echo"},
     "tts": {"http"},
 }
 
@@ -145,11 +145,24 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
                     f"{base_path}.audio_formats is only valid for stt providers"
                 )
             audio_formats = None
+        endpoint_value = item.get("endpoint")
+        if service == "llm" and provider_type == "local_echo":
+            if endpoint_value is not None and str(endpoint_value).strip() != "":
+                raise ConfigError(
+                    f"{base_path}.endpoint must be omitted or empty for local_echo providers"
+                )
+            if item.get("api_key_env") is not None:
+                raise ConfigError(
+                    f"{base_path}.api_key_env must be null for local_echo providers"
+                )
+            endpoint = ""
+        else:
+            endpoint = _require(endpoint_value, f"{base_path}.endpoint")
         providers.append(
             ProviderConfig(
                 name=name,
                 provider_type=provider_type,
-                endpoint=_require(item.get("endpoint"), f"{base_path}.endpoint"),
+                endpoint=endpoint,
                 timeout_s=float(item.get("timeout_s", 15.0)),
                 api_key_env=item.get("api_key_env"),
                 max_failures=int(item.get("max_failures", 2)),

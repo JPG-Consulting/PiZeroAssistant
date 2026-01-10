@@ -91,26 +91,78 @@ compilation. They are not Python bugs and not user mistakes. Retrying with the s
 will not succeed on constrained hardware. Use the safe, single-threaded build described
 above instead.
 
-### Alternative workflow: build elsewhere and copy
+### Building Python 3.11 on another Raspberry Pi and copying it
 
-If local builds are still too slow or unreliable, you can build Python 3.11 on a more
-powerful system and copy the installation to the Pi Zero / Zero 2. This is optional,
-advanced, and intended for users who hit local build limits.
+On Raspberry Pi Zero / Zero 2–class hardware, compiling Python 3.11 locally can be very slow
+and, in some cases, unreliable. An alternative and often preferable approach is to build
+Python 3.11 on a more powerful Raspberry Pi (such as a Pi 4 or Pi 5) and copy the resulting
+installation to the target device.
 
-High-level procedure:
+This workflow is supported when the build and target systems run the same Raspberry Pi OS
+release, use the same architecture and bitness, and the Python installation is kept
+isolated from the system Python.
 
-1. Build Python 3.11 on a compatible ARM Linux system (e.g., Pi 4 / Pi 5) using a custom
-   prefix such as `/opt/python3.11` (do not overwrite system Python).
-2. Copy the resulting directory to the target device (e.g., `rsync` or `scp`).
-3. Use the copied interpreter to create virtual environments on the target device.
+#### Step 1: Build on the build machine
 
-Constraints and caveats:
+Install dependencies:
 
-- Build and target architectures must be compatible.
-- System libraries should match closely between build and target devices.
-- Do not replace the system Python.
-- This workflow assumes basic Linux/ARM familiarity.
+```bash
+sudo apt update
+sudo apt install -y build-essential libssl-dev zlib1g-dev \
+  libncurses5-dev libncursesw5-dev libreadline-dev \
+  libsqlite3-dev libffi-dev libbz2-dev liblzma-dev \
+  tk-dev wget
+```
+
+Download and configure Python:
+
+```bash
+cd /tmp
+wget https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz
+tar -xzf Python-3.11.9.tgz
+cd Python-3.11.9
+./configure \
+  --prefix=/opt/python3.11 \
+  --enable-shared \
+  --without-ensurepip
+```
+
+Build and install:
+
+```bash
+make -j$(nproc)
+sudo make install
+```
+
+#### Step 2: Copy to the target device
+
+```bash
+rsync -a /opt/python3.11 pi@PI_ZERO_IP:/opt/
+```
+
+#### Step 3: Use on the target device
+
+```bash
+/opt/python3.11/bin/python3.11 -m venv .venv
+source .venv/bin/activate
+```
+
+If shared library errors occur, register the library path:
+
+```bash
+sudo sh -c 'echo /opt/python3.11/lib > /etc/ld.so.conf.d/python3.11.conf'
+sudo ldconfig
+```
+
+### Recommendation
+
+For Raspberry Pi Zero / Zero 2:
+
+- **Preferred:** Build Python 3.11 on a Pi 4 / Pi 5 and copy it
+- **Supported:** Local single-threaded build without PGO/LTO
+- **Not supported:** Local PGO/LTO or aggressive parallel builds
 
 ## Future expectations (non-binding)
 
-Python version requirements will be revisited when `openwakeword` adds support for newer Python releases. Until then, Python 3.11 remains the required version for production builds.
+Python version requirements will be revisited when `openwakeword` adds support for newer
+Python releases. Until then, Python 3.11 remains the required version for production builds.

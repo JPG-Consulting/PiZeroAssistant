@@ -8,6 +8,7 @@ from typing import Optional
 
 import requests
 
+from voiceassistant.audio.stream import AudioStream, BytesAudioStream
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import LLMRequest, Provider, ProviderError
 
@@ -26,7 +27,18 @@ class LLMResponse:
 
 @dataclass
 class TTSResponse:
-    wav_bytes: bytes
+    audio: Optional[AudioStream] = None
+    wav_bytes: Optional[bytes] = None
+
+    @classmethod
+    def from_bytes(cls, wav_bytes: bytes, sample_rate_hz: int, channels: int) -> "TTSResponse":
+        audio = BytesAudioStream(
+            data=wav_bytes,
+            format="wav",
+            sample_rate_hz=sample_rate_hz,
+            channels=channels,
+        )
+        return cls(audio=audio, wav_bytes=wav_bytes)
 
 
 class HttpProvider(Provider):

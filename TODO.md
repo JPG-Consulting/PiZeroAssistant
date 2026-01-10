@@ -52,6 +52,50 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
 - [~] **LAN OpenAI-compatible STT provider** (initial implementation)
 
+- [x] **LAN OpenAI-compatible TTS provider** (initial implementation)
+
+- [ ] **Allow selecting TTS audio format (pcm/mp3/opus) via config**
+
+- [x] **Streaming TTS transport** (LAN HTTP provider)
+
+- [x] **Streaming AudioStream decoding**
+
+- [x] **MP3/OPUS incremental decoding**
+
+- [x] **Streaming TTS playback**
+
+- [ ] **MP3/OPUS streaming decoding validated on Pi**
+
+- [ ] **Playback latency measurements**
+
+- [ ] **Optional jitter buffering / chunk sizing tuning**
+
+- [ ] **Validate streaming TTS over real LAN (MP3/OPUS) with barge-in**
+
+- [ ] **Drain ffmpeg stderr to avoid pipe backpressure**
+
+- [ ] **Optional AudioStream.close() support across playback**
+
+- [ ] **Document playback stop latency guarantees**
+
+- [ ] **Measure time-to-first-audio (TTS streaming)**
+
+- [ ] **Validate ffmpeg streaming behavior on Pi Zero**
+
+- [ ] **Optional configurable decoder chunk size**
+
+- [ ] **Optional selector timeout tuning for lower barge-in latency**
+
+- [ ] **Allow non-PCM default for LAN TTS (MP3/OPUS first-byte streaming)**
+
+- [ ] **Document AudioStream lifecycle expectations**
+
+- [ ] **Add test coverage for streaming WAV header priming**
+
+- [ ] **Add integration test for barge-in during streaming TTS**
+
+- [ ] **Expose playback stop latency metrics**
+
 - [ ] **Wake beep asset handling**
 
   - Document optional wake beep behavior

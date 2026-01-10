@@ -70,7 +70,10 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
 - **STT providers** accept WAV audio and return transcribed text.
 - **LLM providers** accept an explicit message list (`LLMRequest.messages`) and return response text.
   **LLM providers must not retain conversational history or dialogue state.** Each call must be treated as an independent completion; providers must not store prompts, responses, or message history across requests.
-- **TTS providers** accept text and return WAV audio.
+- **TTS providers** accept text and return encoded audio. They may return either full WAV bytes or a streaming `AudioStream`.
+  - LAN TTS uses `POST /v1/audio/speech` and requests `format: pcm` so the runtime receives raw audio bytes.
+  - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.
+  - Playback owns decoding, buffering, and streaming control; providers must not decode audio or buffer entire output before playback begins.
 
 `provider_type: local_echo` is a diagnostic-only LLM provider that returns the latest user message verbatim. It has no intelligence, memory, context, or external dependency, and exists solely to validate the STT → LLM → TTS pipeline. It is not a conversational model.
 

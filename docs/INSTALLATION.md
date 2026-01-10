@@ -43,6 +43,9 @@ wakeword:
   model_path: "models/hey_jarvis_v0.1.onnx"
 ```
 
+**Wakeword model format note:** The wakeword model format must match the configured inference backend.
+For Raspberry Pi Zero / Zero 2, TFLite (`.tflite`) models are recommended.
+
 The runtime selects the backend based on the file extension: `.onnx` uses ONNXRuntime and `.tflite` uses TFLite. There is no auto-conversion or runtime downloading.
 
 If the model file is missing or unreadable, startup fails with a clear error and the wake-word service does not start. This is intentional and not a bug.

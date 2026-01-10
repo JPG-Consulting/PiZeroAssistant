@@ -11,11 +11,15 @@ import wave
 from voiceassistant.audio.playback import PlaybackController, PlaybackRequest
 from voiceassistant.audio.recorder import Recorder, RecordingResult
 from voiceassistant.conversation.memory import ConversationMemory
-from voiceassistant.config import AppConfig, resolve_api_key
+from voiceassistant.config import AppConfig
 from voiceassistant.llm.prompts import RESET_ACK_TEXT, SYSTEM_PROMPT
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import LLMRequest, ProviderError
-from voiceassistant.providers.http import HttpLLMProvider, HttpSTTProvider, HttpTTSProvider
+from voiceassistant.providers.factory import (
+    build_llm_provider,
+    build_stt_provider,
+    build_tts_provider,
+)
 from voiceassistant.providers.router import ProviderRouter, RoutedProvider
 from voiceassistant.wakeword.service import WakewordEvent
 
@@ -49,12 +53,7 @@ class AssistantStateMachine:
         self._stt_router = ProviderRouter(
             providers=[
                 RoutedProvider(
-                    provider=HttpSTTProvider(
-                        name=cfg.name,
-                        endpoint=cfg.endpoint,
-                        timeout_s=cfg.timeout_s,
-                        api_key=resolve_api_key(cfg),
-                    ),
+                    provider=build_stt_provider(cfg),
                     max_failures=cfg.max_failures,
                     cooldown_s=cfg.cooldown_s,
                 )
@@ -65,12 +64,7 @@ class AssistantStateMachine:
         self._llm_router = ProviderRouter(
             providers=[
                 RoutedProvider(
-                    provider=HttpLLMProvider(
-                        name=cfg.name,
-                        endpoint=cfg.endpoint,
-                        timeout_s=cfg.timeout_s,
-                        api_key=resolve_api_key(cfg),
-                    ),
+                    provider=build_llm_provider(cfg),
                     max_failures=cfg.max_failures,
                     cooldown_s=cfg.cooldown_s,
                 )
@@ -81,12 +75,7 @@ class AssistantStateMachine:
         self._tts_router = ProviderRouter(
             providers=[
                 RoutedProvider(
-                    provider=HttpTTSProvider(
-                        name=cfg.name,
-                        endpoint=cfg.endpoint,
-                        timeout_s=cfg.timeout_s,
-                        api_key=resolve_api_key(cfg),
-                    ),
+                    provider=build_tts_provider(cfg),
                     max_failures=cfg.max_failures,
                     cooldown_s=cfg.cooldown_s,
                 )

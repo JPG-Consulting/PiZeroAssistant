@@ -7,8 +7,9 @@ import threading
 import time
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
+import numpy as np
 import webrtcvad
 
 from voiceassistant.audio.capture import AudioFrame
@@ -103,6 +104,39 @@ class WakewordService:
     def stop(self) -> None:
         self._running.clear()
 
+    @staticmethod
+    def _describe_audio_input(x: Any) -> str:
+        if isinstance(x, np.ndarray):
+            return f"type=ndarray dtype={x.dtype} shape={x.shape}"
+        try:
+            length = len(x)
+        except TypeError:
+            length = "unknown"
+        return f"type={type(x).__name__} len={length}"
+
+    @staticmethod
+    def _to_int16_mono_array(x: Any) -> np.ndarray:
+        if isinstance(x, np.ndarray):
+            array = x
+        elif isinstance(x, (bytes, bytearray, memoryview)):
+            array = np.frombuffer(x, dtype=np.int16)
+        else:
+            raise ValueError(
+                "Wakeword audio input must be a numpy array or raw PCM bytes"
+            )
+
+        if array.dtype != np.int16:
+            array = array.astype(np.int16, copy=False)
+
+        if array.ndim != 1:
+            array = np.squeeze(array)
+            if array.ndim != 1:
+                raise ValueError(
+                    "Wakeword audio input must be a 1-D int16 mono array"
+                )
+
+        return array
+
     def _run(self) -> None:  # pragma: no cover - realtime
         buffer = bytearray()
         frame_bytes = int(self.sample_rate_hz * self.frame_duration_ms / 1000) * 2
@@ -128,7 +162,22 @@ class WakewordService:
             window = bytes(buffer[:target_bytes])
             buffer = buffer[target_bytes:]
 
-            scores = self._model.predict(window)
+            try:
+                audio = self._to_int16_mono_array(window)
+                scores = self._model.predict(audio)
+            except ValueError as exc:
+                logger.warning(
+                    "Wakeword input validation failed: %s (%s)",
+                    exc,
+                    self._describe_audio_input(window),
+                )
+                continue
+            except Exception:
+                logger.exception(
+                    "Wakeword inference failed (%s)",
+                    self._describe_audio_input(window),
+                )
+                continue
             if not scores:
                 continue
             score = max(scores.values())

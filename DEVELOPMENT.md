@@ -23,6 +23,7 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 - Frames are not shared between VAD and KWS paths; the service copies incoming frames before use.
 - A fixed-size pre-roll buffer is maintained via a ring buffer (default 400 ms). Pre-roll is emitted as part of the wake event payload.
 - Wakeword detection applies a cooldown to prevent repeated triggers.
+- Wakeword inference input is `np.ndarray[int16]` mono PCM at 16 kHz.
 
 ### Wake-word model formats and selection
 

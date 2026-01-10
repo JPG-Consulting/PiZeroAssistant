@@ -99,6 +99,7 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 - Missing `openwakeword` dependency prevents wakeword service from starting.
 - Invalid WAV bytes from a TTS provider result in playback errors.
 - If provider endpoints return malformed JSON, the pipeline aborts and returns to `IDLE`.
+- Python 3.11 PGO/LTO builds fail on Pi Zero-class hardware; this is an environmental limitation, not a bug. See `docs/dev/python-versions.md` for details.
 
 ## Logging contract (v1.0)
 
@@ -109,6 +110,8 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 ### Python version requirements
 
 Python 3.11 is required because `openwakeword==0.5.1` only supports Python 3.11 today. Raspberry Pi OS Bookworm ships with Python 3.11, while Raspberry Pi OS Trixie ships with Python 3.13 and requires a separate Python 3.11 install. See `docs/dev/python-versions.md` for platform details and installation guidance.
+
+Building Python 3.11 on Pi Zero / Zero 2 has known constraints, and PGO/LTO builds are explicitly unsupported. The procedures and limitations described in `docs/dev/python-versions.md` are part of the supported platform contract for this project.
 
 ## Platform support policy
 

@@ -4,9 +4,9 @@
 
 - **Python 3.11** is required due to `openwakeword==0.5.1` compatibility.
 - Raspberry Pi OS **Bookworm** includes Python 3.11.
-- Raspberry Pi OS **Trixie** ships with Python 3.13 and requires a separate Python 3.11 install.
+- Raspberry Pi OS **Trixie** ships with Python 3.13, so Python 3.11 must be installed manually.
 
-For details and safe installation steps on Trixie, see `docs/dev/python-versions.md`.
+For platform policy and safe installation steps, see `docs/dev/python-versions.md`.
 
 ## Quick start
 

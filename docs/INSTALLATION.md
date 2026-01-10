@@ -6,7 +6,8 @@
 - Raspberry Pi OS **Bookworm** includes Python 3.11.
 - Raspberry Pi OS **Trixie** ships with Python 3.13, so Python 3.11 must be installed manually.
 
-For platform policy and safe installation steps, see `docs/dev/python-versions.md`.
+Installation assumes sudo access to write to `/opt` and to run `ldconfig` when required by the platform.
+For Raspberry Pi OS Trixie and Pi Zero / Zero 2 details, see `docs/dev/python-versions.md`.
 
 ## Quick start
 
@@ -48,8 +49,12 @@ If the model file is missing or unreadable, startup fails with a clear error and
 
 Training custom wake words is out of scope for this installation guide. For advanced model creation or customization, refer to developer documentation instead.
 
+This project uses a `src/` layout, so Python needs to be told where to find the `voiceassistant` package. This is expected and intentional during development.
+
 Then run:
 
 ```bash
-python -m voiceassistant.main --config config/config.yaml
+PYTHONPATH=src python -m voiceassistant.main --config config/config.yaml
 ```
+
+Advanced users can optionally install the project in editable mode to avoid setting `PYTHONPATH`, but it is not required to get started.

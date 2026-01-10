@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import enum
+import io
 import queue
+import time
+import wave
 
 from voiceassistant.audio.playback import PlaybackController, PlaybackRequest
 from voiceassistant.audio.recorder import Recorder, RecordingResult
+from voiceassistant.conversation.memory import ConversationMemory
 from voiceassistant.config import AppConfig, resolve_api_key
+from voiceassistant.llm.prompts import RESET_ACK_TEXT, SYSTEM_PROMPT
 from voiceassistant.logging_config import get_logger
-from voiceassistant.providers.base import ProviderError
+from voiceassistant.providers.base import LLMRequest, ProviderError
 from voiceassistant.providers.http import HttpLLMProvider, HttpSTTProvider, HttpTTSProvider
 from voiceassistant.providers.router import ProviderRouter, RoutedProvider
 from voiceassistant.wakeword.service import WakewordEvent
@@ -89,6 +94,12 @@ class AssistantStateMachine:
             ],
             max_fallbacks=config.routing.max_fallbacks,
         )
+        self._conversation_memory = ConversationMemory(config.conversation)
+        self._conversation_memory.load_if_enabled()
+        logger.debug(
+            "Conversation persistence enabled: %s",
+            self._conversation_memory.persistence_enabled,
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -119,7 +130,26 @@ class AssistantStateMachine:
 
         try:
             transcript = self._run_stt(result)
-            reply = self._run_llm(transcript)
+            self._conversation_memory.reset_if_idle(time.monotonic())
+            if self._conversation_memory.check_and_apply_reset(transcript):
+                logger.info("Conversation reset via user command")
+                self._conversation_memory.persist_if_enabled()
+                reply = RESET_ACK_TEXT
+            else:
+                self._conversation_memory.add_user(transcript)
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    *self._conversation_memory.build_messages(),
+                ]
+                total_chars = sum(len(message["content"]) for message in messages)
+                logger.debug(
+                    "LLM request: %d messages, %d characters",
+                    len(messages),
+                    total_chars,
+                )
+                reply = self._run_llm(messages)
+                self._conversation_memory.add_assistant(reply)
+                self._conversation_memory.persist_if_enabled()
             wav_bytes = self._run_tts(reply)
         except ProviderError:
             logger.exception("Provider error in pipeline")
@@ -137,15 +167,18 @@ class AssistantStateMachine:
 
     def _run_stt(self, result: RecordingResult) -> str:
         self._state = AssistantState.STT
+        wav_bytes = self._build_wav_bytes(result)
         response, provider_name = self._stt_router.call(
-            lambda provider: provider.transcribe(result.pcm)
+            lambda provider: provider.transcribe(wav_bytes)
         )
         logger.info("STT complete via %s", provider_name)
         return response.text
 
-    def _run_llm(self, transcript: str) -> str:
+    def _run_llm(self, messages: list[dict]) -> str:
         self._state = AssistantState.LLM
-        response, provider_name = self._llm_router.call(lambda provider: provider.complete(transcript))
+        response, provider_name = self._llm_router.call(
+            lambda provider: provider.complete(LLMRequest(messages=messages))
+        )
         logger.info("LLM complete via %s", provider_name)
         return response.text
 
@@ -154,6 +187,15 @@ class AssistantStateMachine:
         response, provider_name = self._tts_router.call(lambda provider: provider.synthesize(text))
         logger.info("TTS complete via %s", provider_name)
         return response.wav_bytes
+
+    def _build_wav_bytes(self, result: RecordingResult) -> bytes:
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as handle:
+            handle.setnchannels(result.channels)
+            handle.setsampwidth(2)
+            handle.setframerate(result.sample_rate_hz)
+            handle.writeframes(result.pcm)
+        return buffer.getvalue()
 
     def _monitor_playback(self) -> None:
         while self._playback.is_playing():

@@ -39,5 +39,17 @@ logging:
   level: "INFO"
   module_levels:
     voiceassistant.wakeword.service: "INFO"
+conversation:
+  enabled: true
+  max_turns: 6
+  max_chars: 4000
+  reset_after_idle_s: 300
+  reset_commands:
+    - "reset conversation"
+    - "forget this"
+    - "clear memory"
+  persistence:
+    enabled: false
+    path: "/var/lib/voiceassistant/conversation.json"
 wake_beep_path: "assets/wake_beep.wav"
 record_output_path: "/tmp/last_command.wav"

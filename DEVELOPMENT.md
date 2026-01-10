@@ -59,6 +59,92 @@ so the backend choice remains an explicit trade-off.
 - Each provider has independent failure counters and cooldown windows.
 - The router attempts providers in order and stops once `max_fallbacks` is exceeded.
 
+## Provider architecture and extensibility
+
+The provider system is an abstraction boundary. Each service type (STT, LLM, TTS) exposes a common provider interface, and the runtime only speaks to those interfaces. Providers are instantiated from configuration, not hard-coded. Today, the state machine constructs HTTP provider implementations directly; the intended path is to move that wiring behind a registry or factory so new providers can be added without touching the state machine.
+
+Provider-specific logic means anything beyond invoking the interface methods (for example, API payload formatting, endpoint routing, or response parsing). That logic should live inside provider implementations, not in the state machine, router, or audio pipeline.
+
+### Provider roles
+
+- **STT providers** accept WAV audio and return transcribed text.
+- **LLM providers** accept a text prompt and return response text.
+  **LLM providers must not retain conversational history or dialogue state.** Each call must be treated as an independent completion; providers must not store prompts, responses, or message history across requests.
+- **TTS providers** accept text and return WAV audio.
+
+All providers are synchronous and must raise `ProviderError` on failure. “Stateless” means providers must not retain cross-request conversational, audio, or session state (no carried-over context, buffers, or history). Providers may still read configuration, keep internal helpers, and use per-call transient state.
+
+**Conversational memory placement:** Conversational memory is a higher-level concern. If dialogue history is required, it must be maintained by the state machine or a dedicated dialogue/session manager and supplied explicitly in each LLM request. Providers remain unaware of dialogue continuity.
+
+### Configuration-driven selection
+
+Providers are selected via `config.yaml`. Multiple providers can be listed per service and are tried in order for fallback. Provider names are logical identifiers, not hardware-specific.
+
+Example:
+
+```yaml
+routing:
+  stt_providers:
+    - name: "lan-stt"
+      endpoint: "http://<host>/v1/audio/transcriptions"
+      timeout_s: 15
+      api_key_env: null
+      max_failures: 2
+      cooldown_s: 60
+  llm_providers:
+    - name: "local-llm"
+      endpoint: "http://<host>/v1/chat/completions"
+      timeout_s: 20
+      api_key_env: null
+      max_failures: 2
+      cooldown_s: 60
+  tts_providers:
+    - name: "local-tts"
+      endpoint: "http://<host>/v1/audio/speech"
+      timeout_s: 20
+      api_key_env: null
+      max_failures: 2
+      cooldown_s: 60
+  max_fallbacks: 2
+```
+
+### Where provider code lives
+
+- Provider implementations live in `src/voiceassistant/providers/`.
+- Routing and fallback live in `src/voiceassistant/providers/router.py` and should not be modified for new providers.
+- Base types live in `src/voiceassistant/providers/base.py` (including `Provider` and `ProviderError`).
+
+### Adding a new provider
+
+**To add a new provider:**
+
+1. Implement a new provider class (for example, `GoogleSTTProvider`).
+2. Subclass the appropriate base provider.
+3. Implement the required method (`transcribe`, `complete`, or `synthesize`).
+4. Ensure configuration fields are read from `ProviderConfig`.
+5. Today, add provider construction alongside the existing HTTP wiring in `src/voiceassistant/state_machine.py`; the target architecture is to move this behind a registry or factory.
+
+Existing providers should not be edited; add new providers as additive implementations.
+
+#### Service-specific checklist
+
+- **STT**: implement `transcribe(wav_bytes: bytes) -> STTResponse`, accept WAV bytes, return text.
+- **LLM**: implement `complete(prompt: str) -> LLMResponse`, accept prompt text, return response text.
+- **TTS**: implement `synthesize(text: str) -> TTSResponse`, accept text, return WAV bytes.
+
+Invariants for all providers:
+
+- Raise `ProviderError` for any failure.
+- Respect `timeout_s` from configuration.
+- Do not retry internally (the router handles fallback).
+
+### Non-goals
+
+- No dynamic plugin loading (yet).
+- No runtime code generation.
+- No provider auto-detection.
+- No provider-specific logic in the state machine beyond provider construction.
+
 ## Health checks
 
 - Providers can opt into health checks via `Provider.health_check()`; default is always healthy.

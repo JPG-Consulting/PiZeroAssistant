@@ -61,7 +61,7 @@ so the backend choice remains an explicit trade-off.
 
 ## Provider architecture and extensibility
 
-The provider system is an abstraction boundary. Each service type (STT, LLM, TTS) exposes a common provider interface, and the runtime only speaks to those interfaces. Providers are instantiated from configuration, not hard-coded. Today, the state machine constructs HTTP provider implementations directly; the intended path is to move that wiring behind a registry or factory so new providers can be added without touching the state machine.
+The provider system is an abstraction boundary. Each service type (STT, LLM, TTS) exposes a common provider interface, and the runtime only speaks to those interfaces. Providers are instantiated from configuration via a factory (`src/voiceassistant/providers/factory.py`) so new providers can be added without touching the state machine.
 
 Provider-specific logic means anything beyond invoking the interface methods (for example, API payload formatting, endpoint routing, or response parsing). That logic should live inside provider implementations, not in the state machine, router, or audio pipeline.
 
@@ -76,9 +76,17 @@ All providers are synchronous and must raise `ProviderError` on failure. “Stat
 
 **Conversational memory placement:** Conversational memory is owned by the state machine and supplied explicitly with each LLM request. Providers remain unaware of dialogue continuity and must never implement provider-side chat history. Persistence, when enabled, is local-only and opt-in.
 
+### Provider capabilities (audio formats)
+
+- STT providers declare supported input formats via `audio_formats` (for example, `["wav", "opus"]`).
+- `wav` is the required baseline and must always be listed.
+- Unsupported `audio_formats` values fail fast during config load (no runtime fallback or silent correction).
+- These flags are declarative metadata only and do not imply runtime encoding support or negotiation; providers do not negotiate formats and the runtime does not transcode.
+- The pipeline decides which encoding to send. Today, it only sends WAV regardless of the declared list.
+
 ### Configuration-driven selection
 
-Providers are selected via `config.yaml`. Multiple providers can be listed per service and are tried in order for fallback. Provider names are logical identifiers, not hardware-specific.
+Providers are selected via `config.yaml`. Multiple providers can be listed per service and are tried in order for fallback. Provider names are logical identifiers only (no name-prefix selection). The provider implementation is selected explicitly by `provider_type`, and unsupported types fail fast at startup during config load.
 
 Example:
 
@@ -86,13 +94,16 @@ Example:
 routing:
   stt_providers:
     - name: "lan-stt"
+      provider_type: "http"
       endpoint: "http://<host>/v1/audio/transcriptions"
       timeout_s: 15
       api_key_env: null
       max_failures: 2
       cooldown_s: 60
+      audio_formats: ["wav"]
   llm_providers:
     - name: "local-llm"
+      provider_type: "http"
       endpoint: "http://<host>/v1/chat/completions"
       timeout_s: 20
       api_key_env: null
@@ -100,6 +111,7 @@ routing:
       cooldown_s: 60
   tts_providers:
     - name: "local-tts"
+      provider_type: "http"
       endpoint: "http://<host>/v1/audio/speech"
       timeout_s: 20
       api_key_env: null
@@ -122,7 +134,7 @@ routing:
 2. Subclass the appropriate base provider.
 3. Implement the required method (`transcribe`, `complete`, or `synthesize`).
 4. Ensure configuration fields are read from `ProviderConfig`.
-5. Today, add provider construction alongside the existing HTTP wiring in `src/voiceassistant/state_machine.py`; the target architecture is to move this behind a registry or factory.
+5. Register the new provider type in `src/voiceassistant/providers/factory.py`.
 
 Existing providers should not be edited; add new providers as additive implementations.
 
@@ -143,7 +155,7 @@ Invariants for all providers:
 - No dynamic plugin loading (yet).
 - No runtime code generation.
 - No provider auto-detection.
-- No provider-specific logic in the state machine beyond provider construction.
+- No provider-specific logic in the state machine.
 
 ## Health checks
 

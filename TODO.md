@@ -17,7 +17,7 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Local-only storage
   - Clear privacy invariants
 
-- [ ] **Provider registry / factory**
+- [x] **Provider registry / factory**
 
   - Move provider construction out of `state_machine.py`
   - Allow adding new providers without touching core runtime logic
@@ -32,11 +32,21 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Document optional wake beep behavior
   - Fail gracefully if asset is missing
 
-- [ ] **Support compressed audio formats for STT**
+- [~] **Support compressed audio formats for STT** (metadata only; encoding/negotiation pending)
 
   - Allow sending OPUS and/or MP3 audio to STT providers
   - Keep WAV as the default for compatibility
   - Encoding must be explicit and configurable per provider
+
+- [ ] **STT encoding selection**
+
+  - Choose an encoding based on provider `audio_formats` and pipeline constraints
+  - Keep WAV as the default fallback when no match exists
+
+- [ ] **Per-provider audio format negotiation**
+
+  - Select STT input format per provider during routing
+  - Avoid implicit negotiation or silent fallback
 
 - [ ] **Internationalize assistant TTS messages**
 

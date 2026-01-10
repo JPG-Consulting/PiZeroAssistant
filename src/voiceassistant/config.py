@@ -33,11 +33,13 @@ class WakewordConfig:
 @dataclass(frozen=True)
 class ProviderConfig:
     name: str
+    provider_type: str
     endpoint: str
     timeout_s: float
     api_key_env: Optional[str]
     max_failures: int
     cooldown_s: int
+    audio_formats: Optional[List[str]]
 
 
 @dataclass(frozen=True)
@@ -85,23 +87,74 @@ class ConfigError(ValueError):
     """Raised when configuration is invalid."""
 
 
+SUPPORTED_PROVIDER_TYPES = {
+    "stt": {"http"},
+    "llm": {"http"},
+    "tts": {"http"},
+}
+
+STT_AUDIO_FORMATS = {"wav", "opus", "mp3"}
+
+
 def _require(value: Any, field: str) -> Any:
     if value is None:
         raise ConfigError(f"Missing required config field: {field}")
     return value
 
 
-def _provider_list(raw_list: List[Dict[str, Any]]) -> List[ProviderConfig]:
+def _normalize_audio_formats(raw_formats: Any, field_path: str) -> List[str]:
+    if raw_formats is None:
+        return ["wav"]
+    if not isinstance(raw_formats, list):
+        raise ConfigError(f"{field_path} must be a list of audio format strings")
+    formats = [str(item).lower() for item in raw_formats]
+    unknown = sorted({fmt for fmt in formats if fmt not in STT_AUDIO_FORMATS})
+    if unknown:
+        allowed = ", ".join(sorted(STT_AUDIO_FORMATS))
+        raise ConfigError(
+            f"{field_path} contains unsupported formats: {', '.join(unknown)}. "
+            f"Supported formats: {allowed}"
+        )
+    if "wav" not in formats:
+        raise ConfigError(f"{field_path} must include 'wav' as a required baseline")
+    return formats
+
+
+def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[ProviderConfig]:
     providers: List[ProviderConfig] = []
-    for item in raw_list:
+    for index, item in enumerate(raw_list):
+        base_path = f"routing.{service}_providers[{index}]"
+        name = _require(item.get("name"), f"{base_path}.name")
+        provider_type = _require(item.get("provider_type"), f"{base_path}.provider_type")
+        provider_type = str(provider_type).lower()
+        supported = SUPPORTED_PROVIDER_TYPES.get(service, set())
+        if provider_type not in supported:
+            supported_types = ", ".join(sorted(supported)) or "<none>"
+            raise ConfigError(
+                f"Unsupported {service} provider_type '{provider_type}' for '{name}'. "
+                f"Supported types: {supported_types}"
+            )
+        if service == "stt":
+            audio_formats = _normalize_audio_formats(
+                item.get("audio_formats"),
+                f"{base_path}.audio_formats",
+            )
+        else:
+            if item.get("audio_formats") is not None:
+                raise ConfigError(
+                    f"{base_path}.audio_formats is only valid for stt providers"
+                )
+            audio_formats = None
         providers.append(
             ProviderConfig(
-                name=_require(item.get("name"), "provider.name"),
-                endpoint=_require(item.get("endpoint"), "provider.endpoint"),
+                name=name,
+                provider_type=provider_type,
+                endpoint=_require(item.get("endpoint"), f"{base_path}.endpoint"),
                 timeout_s=float(item.get("timeout_s", 15.0)),
                 api_key_env=item.get("api_key_env"),
                 max_failures=int(item.get("max_failures", 2)),
                 cooldown_s=int(item.get("cooldown_s", 60)),
+                audio_formats=audio_formats,
             )
         )
     return providers
@@ -146,9 +199,9 @@ def load_config(path: str) -> AppConfig:
             wakeword_cooldown_ms=int(wakeword.get("wakeword_cooldown_ms", 1500)),
         ),
         routing=RoutingConfig(
-            stt_providers=_provider_list(routing.get("stt_providers", [])),
-            llm_providers=_provider_list(routing.get("llm_providers", [])),
-            tts_providers=_provider_list(routing.get("tts_providers", [])),
+            stt_providers=_provider_list(routing.get("stt_providers", []), "stt"),
+            llm_providers=_provider_list(routing.get("llm_providers", []), "llm"),
+            tts_providers=_provider_list(routing.get("tts_providers", []), "tts"),
             max_fallbacks=int(routing.get("max_fallbacks", 2)),
         ),
         logging=LoggingConfig(

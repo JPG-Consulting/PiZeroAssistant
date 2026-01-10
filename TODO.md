@@ -27,6 +27,8 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Document required interfaces for STT / LLM / TTS providers
   - Include minimal examples
 
+- [~] **LAN OpenAI-compatible STT provider** (initial implementation)
+
 - [ ] **Wake beep asset handling**
 
   - Document optional wake beep behavior

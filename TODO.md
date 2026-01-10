@@ -27,6 +27,29 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Document required interfaces for STT / LLM / TTS providers
   - Include minimal examples
 
+- [x] **Local echo LLM provider (diagnostic only)**
+
+  - Returns the user message verbatim (or lightly formatted)
+  - No external dependencies
+  - No provider-side memory
+  - Used for STT → LLM → TTS smoke testing
+  - Safe to disable or remove later
+  - Implements the same LLM provider interface
+  - Selectable via `provider_type`
+  - Must not affect routing, memory, or persistence semantics
+
+- [ ] **End-to-end STT/TTS smoke test**
+
+  - Use echo LLM provider
+  - Verify spoken input is transcribed and spoken back
+  - No dependency on real LLMs
+
+- [ ] **LLM provider capability documentation**
+
+  - Explicitly document statelessness invariant
+  - Document that providers must not store chat history
+  - Clarify difference between provider logic and state-machine-owned memory
+
 - [~] **LAN OpenAI-compatible STT provider** (initial implementation)
 
 - [ ] **Wake beep asset handling**

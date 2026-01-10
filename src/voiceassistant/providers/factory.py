@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from voiceassistant.config import ConfigError, ProviderConfig, resolve_api_key
+from voiceassistant.providers.echo_llm import LocalEchoLLMProvider
 from voiceassistant.providers.http import HttpLLMProvider, HttpSTTProvider, HttpTTSProvider
 from voiceassistant.providers.lan_stt import LanHttpSTTProvider
+from voiceassistant.providers.llm import LLMProvider
 from voiceassistant.providers.stt import STTProvider
 
 
@@ -29,7 +31,7 @@ def build_stt_provider(config: ProviderConfig) -> STTProvider:
     )
 
 
-def build_llm_provider(config: ProviderConfig) -> HttpLLMProvider:
+def build_llm_provider(config: ProviderConfig) -> LLMProvider:
     if config.provider_type == "http":
         return HttpLLMProvider(
             name=config.name,
@@ -37,6 +39,8 @@ def build_llm_provider(config: ProviderConfig) -> HttpLLMProvider:
             timeout_s=config.timeout_s,
             api_key=resolve_api_key(config),
         )
+    if config.provider_type == "local_echo":
+        return LocalEchoLLMProvider(name=config.name)
     # Should be unreachable because config.py validates provider_type; defensive only.
     raise ConfigError(
         f"Unsupported LLM provider_type '{config.provider_type}' for '{config.name}'"

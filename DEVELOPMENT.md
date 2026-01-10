@@ -72,6 +72,8 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
   **LLM providers must not retain conversational history or dialogue state.** Each call must be treated as an independent completion; providers must not store prompts, responses, or message history across requests.
 - **TTS providers** accept text and return WAV audio.
 
+`provider_type: local_echo` is a diagnostic-only LLM provider that returns the latest user message verbatim. It has no intelligence, memory, context, or external dependency, and exists solely to validate the STT → LLM → TTS pipeline. It is not a conversational model.
+
 All providers are synchronous and must raise `ProviderError` on failure. “Stateless” means providers must not retain cross-request conversational, audio, or session state (no carried-over context, buffers, or history). Providers may still read configuration, keep internal helpers, and use per-call transient state.
 
 **Conversational memory placement:** Conversational memory is owned by the state machine and supplied explicitly with each LLM request. Providers remain unaware of dialogue continuity and must never implement provider-side chat history. Persistence, when enabled, is local-only and opt-in.

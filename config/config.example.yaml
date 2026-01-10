@@ -39,6 +39,13 @@ routing:
       api_key_env: "LLM_API_KEY"
       max_failures: 2
       cooldown_s: 60
+    # - name: "echo-llm"
+    #   provider_type: "local_echo"
+    #   # endpoint: (omit)
+    #   timeout_s: 1
+    #   api_key_env: null
+    #   max_failures: 2
+    #   cooldown_s: 5
   tts_providers:
     - name: "local-tts"
       provider_type: "http"

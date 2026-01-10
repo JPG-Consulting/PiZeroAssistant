@@ -137,7 +137,47 @@ sudo make install
 #### Step 2: Copy to the target device
 
 ```bash
-rsync -a /opt/python3.11 pi@PI_ZERO_IP:/opt/
+rsync -a \
+  --rsync-path="sudo rsync" \
+  /opt/python3.11 \
+  youruser@PI_ZERO_IP:/opt/
+```
+
+`/opt` is root-owned on the target device. If you run `rsync` without `sudo`, it will fail
+with `Permission denied`, which is expected behavior because the remote side is executing
+as your SSH user. The command above runs `sudo rsync` on the target device and will prompt
+for your sudo password.
+
+_Fallback (if `sudo rsync` is unavailable):_ copy into your home directory and move it with
+`sudo`:
+
+```bash
+rsync -a /opt/python3.11 youruser@PI_ZERO_IP:~/
+sudo mv /home/youruser/python3.11 /opt/
+```
+
+#### Verify and register shared libraries on the target device
+
+Because Python was built with `--enable-shared`, the target device must register
+`/opt/python3.11/lib` with the dynamic linker cache. This must be done on the target device,
+even if it was already done on the build machine. You only need to do this once per device.
+
+```bash
+sudo sh -c 'echo /opt/python3.11/lib > /etc/ld.so.conf.d/python3.11.conf'
+sudo ldconfig
+```
+
+Verify the interpreter immediately after copying:
+
+```bash
+/opt/python3.11/bin/python3.11 --version
+```
+
+If this command fails with `libpython3.11.so.1.0` not found, the linker step above was
+missed. You can also confirm the shared library resolution with:
+
+```bash
+ldd /opt/python3.11/bin/python3.11 | grep libpython
 ```
 
 #### Step 3: Use on the target device
@@ -145,13 +185,6 @@ rsync -a /opt/python3.11 pi@PI_ZERO_IP:/opt/
 ```bash
 /opt/python3.11/bin/python3.11 -m venv .venv
 source .venv/bin/activate
-```
-
-If shared library errors occur, register the library path:
-
-```bash
-sudo sh -c 'echo /opt/python3.11/lib > /etc/ld.so.conf.d/python3.11.conf'
-sudo ldconfig
 ```
 
 ### Recommendation

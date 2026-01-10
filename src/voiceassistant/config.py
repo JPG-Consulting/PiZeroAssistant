@@ -88,7 +88,7 @@ class ConfigError(ValueError):
 
 
 SUPPORTED_PROVIDER_TYPES = {
-    "stt": {"http"},
+    "stt": {"http", "lan_http"},
     "llm": {"http"},
     "tts": {"http"},
 }

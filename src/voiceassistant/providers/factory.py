@@ -4,11 +4,20 @@ from __future__ import annotations
 
 from voiceassistant.config import ConfigError, ProviderConfig, resolve_api_key
 from voiceassistant.providers.http import HttpLLMProvider, HttpSTTProvider, HttpTTSProvider
+from voiceassistant.providers.lan_stt import LanHttpSTTProvider
+from voiceassistant.providers.stt import STTProvider
 
 
-def build_stt_provider(config: ProviderConfig) -> HttpSTTProvider:
+def build_stt_provider(config: ProviderConfig) -> STTProvider:
     if config.provider_type == "http":
         return HttpSTTProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+        )
+    if config.provider_type == "lan_http":
+        return LanHttpSTTProvider(
             name=config.name,
             endpoint=config.endpoint,
             timeout_s=config.timeout_s,

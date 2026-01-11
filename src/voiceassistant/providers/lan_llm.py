@@ -108,7 +108,11 @@ class LanHttpLLMProvider(HttpProvider):
 
         This method should:
         - Yield incremental fragments of text.
-        - Finish with a "[DONE]" marker.
+        - Filter out empty fragments and "[DONE]" markers so they never reach
+          the speech pipeline.
+
+        Note: This behavior is intentionally tailored for the current speech
+        pipeline and may change if we introduce a more generic stream consumer.
         """
         payload = {"messages": request.messages, "stream": True}
         try:
@@ -136,14 +140,17 @@ class LanHttpLLMProvider(HttpProvider):
         try:
             for line in resp.iter_lines(decode_unicode=True):
                 if not line:
+                    # Skip empty lines from the stream.
                     continue
                 line = line.strip()
                 if not line:
+                    # Skip any empty content that does not carry data.
                     continue
                 if not line.startswith("data:"):
                     continue
                 data = line[len("data:") :].strip()
                 if data == "[DONE]":
+                    # Filter out the end marker so it is never yielded downstream.
                     break
                 try:
                     payload = json.loads(data)
@@ -154,6 +161,7 @@ class LanHttpLLMProvider(HttpProvider):
                     delta = choice.get("delta") or {}
                     fragment = delta.get("content")
                     if not fragment:
+                        # Skip empty fragments so they never reach TTS.
                         continue
                     emitted = True
                     yield fragment

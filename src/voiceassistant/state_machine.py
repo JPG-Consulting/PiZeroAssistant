@@ -22,6 +22,7 @@ from voiceassistant.providers.factory import (
     build_tts_provider,
 )
 from voiceassistant.providers.router import ProviderRouter, RoutedProvider
+from voiceassistant.speech.coordinator import IncrementalSpeechCoordinator, SpeakableChunk
 from voiceassistant.wakeword.service import WakewordEvent
 
 logger = get_logger(__name__)
@@ -144,9 +145,16 @@ class AssistantStateMachine:
                     len(messages),
                     total_chars,
                 )
-                reply = self._run_llm(messages)
-                self._conversation_memory.add_assistant(reply)
-                self._conversation_memory.persist_if_enabled()
+                reply = self._try_incremental_speech(messages)
+                if reply is None:
+                    reply = self._run_llm(messages)
+                    self._conversation_memory.add_assistant(reply)
+                    self._conversation_memory.persist_if_enabled()
+                else:
+                    self._conversation_memory.add_assistant(reply)
+                    self._conversation_memory.persist_if_enabled()
+                    self._state = AssistantState.IDLE
+                    return
             tts_response = self._run_tts(reply)
         except ProviderError:
             logger.exception("Provider error in pipeline")
@@ -199,7 +207,7 @@ class AssistantStateMachine:
             handle.writeframes(result.pcm)
         return buffer.getvalue()
 
-    def _monitor_playback(self) -> None:
+    def _monitor_playback(self) -> bool:
         while self._playback.is_playing():
             try:
                 event = self._wakeword_events.get(timeout=0.1)
@@ -208,7 +216,89 @@ class AssistantStateMachine:
             if event:
                 logger.info("Barge-in detected; stopping playback")
                 self._playback.stop()
-                return
+                return True
+        return False
+
+    def _try_incremental_speech(self, messages: list[dict]) -> str | None:
+        if not self.config.speech.incremental.enabled:
+            return None
+        provider = self._select_llm_provider()
+        if provider is None or not self._llm_supports_streaming(provider):
+            return None
+        coordinator = IncrementalSpeechCoordinator()
+        text_parts: list[str] = []
+        reply, spoke_any, had_error = self._stream_llm(
+            provider,
+            messages,
+            coordinator,
+            text_parts,
+        )
+        if had_error and not spoke_any:
+            return None
+        if not text_parts:
+            return None
+        return reply
+
+    def _select_llm_provider(self) -> object | None:
+        for routed in self._llm_router._eligible():
+            return routed.provider
+        return None
+
+    def _llm_supports_streaming(self, provider: object) -> bool:
+        stream_method = getattr(provider, "stream", None)
+        return callable(stream_method)
+
+    def _stream_llm(
+        self,
+        provider: object,
+        messages: list[dict],
+        coordinator: IncrementalSpeechCoordinator,
+        text_parts: list[str],
+    ) -> tuple[str, bool, bool]:
+        self._state = AssistantState.LLM
+        spoke_any = False
+        had_error = False
+        try:
+            stream_method = getattr(provider, "stream")
+            for fragment in stream_method(LLMRequest(messages=messages)):
+                if not fragment:
+                    continue
+                text_parts.append(str(fragment))
+                now_ms = self._now_ms()
+                coordinator.on_text(str(fragment), now_ms=now_ms)
+                chunks = coordinator.drain_chunks()
+                if chunks:
+                    spoke_any = True
+                    if self._play_chunks(chunks):
+                        coordinator.cancel(reason="barge_in")
+                        break
+        except ProviderError:
+            had_error = True
+        if not coordinator.cancelled:
+            now_ms = self._now_ms()
+            coordinator.on_llm_complete(now_ms=now_ms)
+            chunks = coordinator.drain_chunks()
+            if chunks:
+                spoke_any = True
+                if self._play_chunks(chunks):
+                    coordinator.cancel(reason="barge_in")
+        return "".join(text_parts), spoke_any, had_error
+
+    def _play_chunks(self, chunks: list[SpeakableChunk]) -> bool:
+        for chunk in chunks:
+            tts_response = self._run_tts(chunk.text)
+            self._playback.play(
+                PlaybackRequest(
+                    wav_bytes=tts_response.wav_bytes,
+                    audio=tts_response.audio,
+                )
+            )
+            if self._monitor_playback():
+                return True
+        return False
+
+    def _now_ms(self) -> int:
+        return int(time.monotonic() * 1000)
 
     def _play_beep(self, path: str) -> None:
         try:

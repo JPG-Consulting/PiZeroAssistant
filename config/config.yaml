@@ -55,5 +55,8 @@ conversation:
   persistence:
     enabled: false
     path: "/var/lib/voiceassistant/conversation.json"
+speech:
+  incremental:
+    enabled: false
 wake_beep_path: "assets/wake_beep.wav"
 record_output_path: "/tmp/last_command.wav"

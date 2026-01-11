@@ -73,12 +73,25 @@ class ConversationConfig:
 
 
 @dataclass(frozen=True)
+class IncrementalSpeechConfig:
+    enabled: bool = False
+
+
+@dataclass(frozen=True)
+class SpeechConfig:
+    incremental: IncrementalSpeechConfig = dataclasses.field(
+        default_factory=IncrementalSpeechConfig
+    )
+
+
+@dataclass(frozen=True)
 class AppConfig:
     audio: AudioConfig
     wakeword: WakewordConfig
     routing: RoutingConfig
     logging: LoggingConfig
     conversation: ConversationConfig
+    speech: SpeechConfig
     wake_beep_path: Optional[str]
     record_output_path: str
 
@@ -182,6 +195,8 @@ def load_config(path: str) -> AppConfig:
     routing = raw.get("routing", {})
     logging_cfg = raw.get("logging", {})
     conversation = raw.get("conversation", {})
+    speech = raw.get("speech", {})
+    incremental_speech = speech.get("incremental", {})
     persistence = conversation.get("persistence", {})
     persistence_enabled = bool(persistence.get("enabled", False))
     persistence_path = persistence.get("path")
@@ -231,6 +246,11 @@ def load_config(path: str) -> AppConfig:
                 enabled=persistence_enabled,
                 path=str(persistence_path) if persistence_path is not None else None,
             ),
+        ),
+        speech=SpeechConfig(
+            incremental=IncrementalSpeechConfig(
+                enabled=bool(incremental_speech.get("enabled", False))
+            )
         ),
         wake_beep_path=raw.get("wake_beep_path"),
         record_output_path=str(raw.get("record_output_path", "/tmp/last_command.wav")),

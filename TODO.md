@@ -50,6 +50,9 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Document that providers must not store chat history
   - Clarify difference between provider logic and state-machine-owned memory
 
+- [x] **Skip LLM/TTS execution on empty STT transcript (token-safe behavior)**
+- [x] **Documented STT empty-transcript contract (empty text is valid; missing text is an error)**
+
 - [ ] **Design sentence-boundary detection heuristics**
 
   - Define safe speech boundaries (punctuation, pauses, length thresholds)

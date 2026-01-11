@@ -119,8 +119,15 @@ class AssistantStateMachine:
         self._recorder.save_wav(result, self.config.record_output_path)
 
         try:
-            transcript = self._run_stt(result)
+            transcript, stt_provider = self._run_stt(result)
             self._conversation_memory.reset_if_idle(time.monotonic())
+            if not transcript or not transcript.strip():
+                logger.debug(
+                    "No speech detected (empty transcript) via %s; returning to IDLE",
+                    stt_provider,
+                )
+                self._state = AssistantState.IDLE
+                return
             if self._conversation_memory.check_and_apply_reset(transcript):
                 logger.info("Conversation reset via user command")
                 self._conversation_memory.persist_if_enabled()
@@ -160,14 +167,14 @@ class AssistantStateMachine:
         self._monitor_playback()
         self._state = AssistantState.IDLE
 
-    def _run_stt(self, result: RecordingResult) -> str:
+    def _run_stt(self, result: RecordingResult) -> tuple[str, str]:
         self._state = AssistantState.STT
         wav_bytes = self._build_wav_bytes(result)
         response, provider_name = self._stt_router.call(
             lambda provider: provider.transcribe(wav_bytes)
         )
         logger.info("STT complete via %s", provider_name)
-        return response.text
+        return response.text, provider_name
 
     def _run_llm(self, messages: list[dict]) -> str:
         self._state = AssistantState.LLM

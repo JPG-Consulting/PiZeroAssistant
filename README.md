@@ -47,6 +47,7 @@ The default HTTP providers expect the following payloads and responses:
 - **STT** (`POST /stt`): multipart form upload with `file` (audio/wav). Response JSON: `{ "text": "..." }`.
 - **LLM** (`POST /llm`): JSON `{ "prompt": "..." }`. Response JSON: `{ "text": "..." }`.
 - **TTS** (`POST /tts`): JSON `{ "text": "..." }`. Response either audio bytes with `Content-Type: audio/wav` or JSON `{ "audio_wav_base64": "..." }`.
+See `DEVELOPMENT.md` for the authoritative STT provider contract, including handling of empty transcripts.
 
 ## Project layout
 

@@ -9,10 +9,14 @@ import threading
 from typing import Iterator
 
 from voiceassistant.audio.stream import AudioStream
+from voiceassistant.logging_config import get_logger
 
 
 class FFMpegDecodeError(RuntimeError):
     """Raised when ffmpeg decoding fails."""
+
+
+logger = get_logger(__name__)
 
 
 def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Iterator[bytes]:
@@ -82,6 +86,9 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
 
     selector = selectors.DefaultSelector()
     stderr_tail = bytearray()
+    total_stdout_bytes = 0
+    stdout_eof = False
+    proc_exited = False
     try:
         assert proc.stdout is not None
         assert proc.stderr is not None
@@ -95,6 +102,7 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
             events = selector.select(timeout=0.1)
             if not events:
                 if proc.poll() is not None:
+                    proc_exited = True
                     break
                 continue
             eof = False
@@ -108,13 +116,43 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
                     continue
                 chunk = os.read(key.fileobj.fileno(), chunk_size)
                 if not chunk:
+                    stdout_eof = True
                     eof = True
                     break
+                total_stdout_bytes += len(chunk)
                 yield chunk
             if eof:
                 break
         if not stop_event.is_set():
+            while True:
+                events = selector.select(timeout=0.1)
+                if not events:
+                    if proc.poll() is not None:
+                        proc_exited = True
+                        break
+                    continue
+                for key, _ in events:
+                    if key.fileobj is proc.stderr:
+                        data = os.read(key.fileobj.fileno(), chunk_size)
+                        if data:
+                            stderr_tail.extend(data)
+                            if len(stderr_tail) > 200:
+                                stderr_tail = stderr_tail[-200:]
+                        continue
+                    chunk = os.read(key.fileobj.fileno(), chunk_size)
+                    if not chunk:
+                        stdout_eof = True
+                        continue
+                    total_stdout_bytes += len(chunk)
+                    yield chunk
             proc.wait()
+            logger.debug(
+                "ffmpeg decode completed stdout_bytes=%d stdout_eof=%s proc_exited=%s returncode=%s",
+                total_stdout_bytes,
+                stdout_eof,
+                proc_exited,
+                proc.returncode,
+            )
             if writer_errors:
                 raise FFMpegDecodeError(str(writer_errors[0]))
             if proc.returncode:
@@ -132,12 +170,15 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
         stop_event.set()
         selector.close()
         if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=1.0)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+            if stdout_eof and proc_exited:
                 proc.wait()
+            else:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
         if proc.stdout:
             proc.stdout.close()
         if proc.stderr:

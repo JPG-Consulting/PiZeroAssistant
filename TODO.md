@@ -80,6 +80,10 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
 - [x] **Streaming TTS playback**
 
+- [ ] **Investigate/validate no-truncation playback for streaming TTS (ensure tail not cut off)**
+
+- [ ] **Add completeness tests for ffmpeg decoding (tail samples non-zero)**
+
 - [ ] **MP3/OPUS streaming decoding validated on Pi**
 
 - [ ] **Playback latency measurements**

@@ -70,6 +70,8 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
 - **STT providers** accept WAV audio and return transcribed text.
 - **LLM providers** accept an explicit message list (`LLMRequest.messages`) and return response text.
   **LLM providers must not retain conversational history or dialogue state.** Each call must be treated as an independent completion; providers must not store prompts, responses, or message history across requests.
+  - LLM providers may stream internally for latency improvements, but they still return a single `LLMResponse` text payload to the state machine.
+  - Incremental speech and sentence boundary decisions belong to the state machine, not the provider.
 - **TTS providers** accept text and return encoded audio. They may return either full WAV bytes or a streaming `AudioStream`.
   - LAN TTS uses `POST /v1/audio/speech` and requests `format: pcm` so the runtime receives raw audio bytes.
   - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.

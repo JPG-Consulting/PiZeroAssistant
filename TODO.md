@@ -50,6 +50,22 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Document that providers must not store chat history
   - Clarify difference between provider logic and state-machine-owned memory
 
+- [ ] **Design sentence-boundary detection heuristics**
+
+  - Define safe speech boundaries (punctuation, pauses, length thresholds)
+  - Avoid half-sentence or half-word speech output
+
+- [ ] **Sketch incremental speech coordinator**
+
+  - Lives in the state machine layer
+  - Buffers streamed LLM output
+  - Emits speakable chunks to TTS
+  - Supports cancellation and barge-in
+
+- [ ] **Measure LLM time-to-first-token vs full completion**
+
+  - Log and compare latency improvements from streaming
+
 - [~] **LAN OpenAI-compatible STT provider** (initial implementation)
 
 - [x] **LAN OpenAI-compatible TTS provider** (initial implementation)

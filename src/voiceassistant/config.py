@@ -89,7 +89,7 @@ class ConfigError(ValueError):
 
 SUPPORTED_PROVIDER_TYPES = {
     "stt": {"http", "lan_http"},
-    "llm": {"http", "local_echo"},
+    "llm": {"http", "lan_http", "local_echo"},
     "tts": {"http", "lan_http"},
 }
 

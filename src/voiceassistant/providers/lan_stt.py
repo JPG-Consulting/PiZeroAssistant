@@ -6,8 +6,11 @@ from typing import Optional
 
 import requests
 
+from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import ProviderError
 from voiceassistant.providers.http import HttpProvider, STTResponse
+
+logger = get_logger(__name__)
 
 
 class LanHttpSTTProvider(HttpProvider):
@@ -49,7 +52,12 @@ class LanHttpSTTProvider(HttpProvider):
             payload = resp.json()
         except ValueError as exc:
             raise ProviderError("Invalid JSON in STT response") from exc
+        if "text" not in payload:
+            raise ProviderError("STT response missing required 'text' field")
         text = payload.get("text")
-        if not text:
-            raise ProviderError("Missing text in STT response")
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            raise ProviderError("Invalid 'text' in STT response")
+        logger.debug("STT transcript length=%d", len(text))
         return STTResponse(text=text)

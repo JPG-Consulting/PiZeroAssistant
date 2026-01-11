@@ -56,7 +56,7 @@ class AssistantStateMachine:
         self._tts_prebuffer_chunks = 2
         self._tts_prebuffer_timeout_s = 0.6
         self._playback_poll_interval_s = 0.02
-        self._barge_in_poll_interval_s = 0.05
+        self._barge_in_poll_interval_s = 0.02
 
         self._stt_router = ProviderRouter(
             providers=[

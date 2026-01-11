@@ -22,20 +22,17 @@ class BoundaryEvaluator:
         *,
         min_chars_medium: int = 80,
         max_chars_without_boundary: int = 240,
-        settle_ms_after_punct: int = 250,
         partial_word_settle_ms: int = 120,
         max_silence_ms: int = 900,
         tail_window: int = 40,
     ) -> None:
         # min_chars_medium: minimum buffered chars before using timing-only boundaries.
         # max_chars_without_boundary: safety valve to avoid unbounded waiting.
-        # settle_ms_after_punct: wait time after punctuation before committing.
         # partial_word_settle_ms: short wait before committing around partial word tails.
         # max_silence_ms: silence threshold for timing-based commits.
         # tail_window: only consider boundaries near the end of the buffer.
         self._min_chars_medium = min_chars_medium
         self._max_chars_without_boundary = max_chars_without_boundary
-        self._settle_ms_after_punct = settle_ms_after_punct
         self._partial_word_settle_ms = partial_word_settle_ms
         self._max_silence_ms = max_silence_ms
         self._tail_window = tail_window
@@ -71,7 +68,6 @@ class BoundaryEvaluator:
             return BoundaryDecision(kind="wait", reason="unclosed_code_block")
 
         elapsed_since_text = now_ms - last_text_ms
-        settle_ok = elapsed_since_text >= self._settle_ms_after_punct
         silence_ok = elapsed_since_text >= self._max_silence_ms
         partial_word_ok = elapsed_since_text >= self._partial_word_settle_ms
 
@@ -83,21 +79,14 @@ class BoundaryEvaluator:
             commit_offset, confidence, reason = candidate
             commit_idx = last_commit_idx + commit_offset
             if commit_idx > last_commit_idx:
-                trailing_text = uncommitted[commit_offset:]
-                has_trailing_text = bool(trailing_text.strip())
-                if settle_ok or llm_completed or has_trailing_text:
-                    return BoundaryDecision(
-                        kind="commit",
-                        commit_upto=commit_idx,
-                        confidence=confidence,
-                        reason=reason,
-                    )
-                return BoundaryDecision(kind="wait", reason="punctuation_settle")
+                return BoundaryDecision(
+                    kind="commit",
+                    commit_upto=commit_idx,
+                    confidence=confidence,
+                    reason=reason,
+                )
 
-        if (
-            self._ends_with_partial_word(buffer, llm_completed=llm_completed)
-            and partial_word_ok
-        ):
+        if self._ends_with_partial_word(buffer, llm_completed=llm_completed):
             whitespace_offset = self._find_whitespace_boundary(
                 uncommitted,
                 code_spans=code_spans,
@@ -111,6 +100,8 @@ class BoundaryEvaluator:
                         confidence="medium",
                         reason="partial_word_tail",
                     )
+            if not partial_word_ok:
+                return BoundaryDecision(kind="wait", reason="partial_word_tail")
 
         if silence_ok and len(uncommitted) >= self._min_chars_medium:
             whitespace_offset = self._find_whitespace_boundary(

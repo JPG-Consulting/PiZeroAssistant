@@ -53,6 +53,10 @@ class AssistantStateMachine:
         self._playback = playback
         self._state = AssistantState.IDLE
         self._running = True
+        self._tts_prebuffer_chunks = 2
+        self._tts_prebuffer_timeout_s = 0.6
+        self._playback_poll_interval_s = 0.02
+        self._barge_in_poll_interval_s = 0.05
 
         self._stt_router = ProviderRouter(
             providers=[
@@ -229,16 +233,12 @@ class AssistantStateMachine:
         return buffer.getvalue()
 
     def _monitor_playback(self) -> bool:
-        while self._playback.is_playing():
-            try:
-                event = self._wakeword_events.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            if event:
-                logger.info("Barge-in detected; stopping playback")
-                self._playback.stop()
-                return True
-        return False
+        barge_in_event = threading.Event()
+        monitor = self._start_barge_in_monitor(barge_in_event)
+        interrupted = self._wait_for_playback_or_barge_in(barge_in_event)
+        barge_in_event.set()
+        monitor.join(timeout=0.1)
+        return interrupted
 
     def _try_incremental_speech(self, messages: list[dict]) -> str | None:
         if not self.config.speech.incremental.enabled:
@@ -330,37 +330,112 @@ class AssistantStateMachine:
         chunk_queue: queue.Queue[SpeakableChunk | None],
         barge_in_event: threading.Event,
     ) -> None:
-        while True:
-            chunk = chunk_queue.get()
-            if chunk is None:
-                return
-            if barge_in_event.is_set():
-                self._drain_chunk_queue(chunk_queue)
-                return
-            interrupted = self._play_chunk(chunk)
-            if interrupted:
-                barge_in_event.set()
-                self._drain_chunk_queue(chunk_queue)
-                return
+        monitor = self._start_barge_in_monitor(barge_in_event)
+        playback_queue: queue.Queue[PlaybackRequest | None] = queue.Queue(
+            maxsize=self._tts_prebuffer_chunks
+        )
+        prebuffered, tts_complete = self._pre_buffer_tts(
+            chunk_queue=chunk_queue,
+            barge_in_event=barge_in_event,
+        )
+        for request in prebuffered:
+            playback_queue.put(request)
+        tts_thread = None
+        if tts_complete:
+            playback_queue.put(None)
+        else:
+            tts_thread = threading.Thread(
+                target=self._tts_prefetch_worker,
+                args=(chunk_queue, playback_queue, barge_in_event),
+                name="TTSPrebuffer",
+                daemon=True,
+            )
+            tts_thread.start()
 
-    def _drain_chunk_queue(
+        try:
+            while True:
+                if barge_in_event.is_set():
+                    self._playback.stop()
+                    self._drain_playback_queue(playback_queue)
+                    return
+                try:
+                    request = playback_queue.get(
+                        timeout=self._playback_poll_interval_s
+                    )
+                except queue.Empty:
+                    if tts_thread and not tts_thread.is_alive() and playback_queue.empty():
+                        return
+                    continue
+                if request is None:
+                    return
+                self._playback.play(request)
+                interrupted = self._wait_for_playback_or_barge_in(barge_in_event)
+                if interrupted:
+                    self._drain_playback_queue(playback_queue)
+                    return
+        finally:
+            barge_in_event.set()
+            monitor.join(timeout=0.1)
+
+    def _pre_buffer_tts(
+        self,
+        *,
+        chunk_queue: queue.Queue[SpeakableChunk | None],
+        barge_in_event: threading.Event,
+    ) -> tuple[list[PlaybackRequest], bool]:
+        buffered: list[PlaybackRequest] = []
+        deadline = time.monotonic() + self._tts_prebuffer_timeout_s
+        tts_complete = False
+        while len(buffered) < self._tts_prebuffer_chunks:
+            if barge_in_event.is_set():
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                chunk = chunk_queue.get(timeout=remaining)
+            except queue.Empty:
+                break
+            if chunk is None:
+                tts_complete = True
+                break
+            request = self._synthesize_request(chunk)
+            if request is None:
+                tts_complete = True
+                break
+            buffered.append(request)
+        return buffered, tts_complete
+
+    def _tts_prefetch_worker(
         self,
         chunk_queue: queue.Queue[SpeakableChunk | None],
+        playback_queue: queue.Queue[PlaybackRequest | None],
+        barge_in_event: threading.Event,
     ) -> None:
         while True:
-            try:
-                chunk_queue.get_nowait()
-            except queue.Empty:
+            if barge_in_event.is_set():
                 return
+            chunk = chunk_queue.get()
+            if chunk is None:
+                playback_queue.put(None)
+                return
+            request = self._synthesize_request(chunk)
+            if request is None:
+                playback_queue.put(None)
+                return
+            playback_queue.put(request)
 
-    def _play_chunk(self, chunk: SpeakableChunk) -> bool:
+    def _synthesize_request(self, chunk: SpeakableChunk) -> PlaybackRequest | None:
         debug_enabled = logger.isEnabledFor(logging.DEBUG)
         if debug_enabled:
             logger.debug("TTS chunk: %r", chunk.text)
-            chunk_start = time.monotonic()
             tts_start = time.monotonic()
             logger.debug("TTS request started at %.6f", tts_start)
-        tts_response = self._run_tts(chunk.text)
+        try:
+            tts_response = self._run_tts(chunk.text)
+        except ProviderError:
+            logger.exception("TTS failed for chunk")
+            return None
         if debug_enabled:
             tts_end = time.monotonic()
             tts_latency = tts_end - tts_start
@@ -377,44 +452,49 @@ class AssistantStateMachine:
                     "Potential bottleneck: TTS synthesis took %.3f s (network or provider latency)",
                     tts_latency,
                 )
-            playback_start = time.monotonic()
-            tts_to_playback_latency = playback_start - tts_start
-            logger.debug("Playback start at %.6f", playback_start)
-            logger.debug(
-                "TTS to playback latency for chunk: %.3f s",
-                tts_to_playback_latency,
-            )
-        self._playback.play(
-            PlaybackRequest(
-                wav_bytes=tts_response.wav_bytes,
-                audio=tts_response.audio,
-            )
+        return PlaybackRequest(
+            wav_bytes=tts_response.wav_bytes,
+            audio=tts_response.audio,
         )
-        if debug_enabled:
-            logger.debug("Starting playback for chunk.")
-            monitor_start = time.monotonic()
-        interrupted = self._monitor_playback()
-        if debug_enabled:
-            monitor_elapsed = time.monotonic() - monitor_start
-            logger.debug(
-                "Playback monitoring took %.3f s for chunk",
-                monitor_elapsed,
-            )
-            if monitor_elapsed > 2.0:
-                logger.debug(
-                    "Potential bottleneck: playback monitoring took %.3f s (long audio or output latency)",
-                    monitor_elapsed,
-                )
-            total_elapsed = time.monotonic() - chunk_start
-            logger.debug(
-                "Total TTS chunk processing time: %.3f s (tts=%.3f s, playback=%.3f s)",
-                total_elapsed,
-                tts_latency,
-                monitor_elapsed,
-            )
-        if interrupted and debug_enabled:
-            logger.debug("Playback interrupted by barge-in.")
-        return interrupted
+
+    def _drain_playback_queue(
+        self,
+        playback_queue: queue.Queue[PlaybackRequest | None],
+    ) -> None:
+        while True:
+            try:
+                playback_queue.get_nowait()
+            except queue.Empty:
+                return
+
+    def _start_barge_in_monitor(self, barge_in_event: threading.Event) -> threading.Thread:
+        monitor = threading.Thread(
+            target=self._barge_in_monitor,
+            args=(barge_in_event,),
+            name="BargeInMonitor",
+            daemon=True,
+        )
+        monitor.start()
+        return monitor
+
+    def _barge_in_monitor(self, barge_in_event: threading.Event) -> None:
+        while not barge_in_event.is_set():
+            try:
+                event = self._wakeword_events.get(timeout=self._barge_in_poll_interval_s)
+            except queue.Empty:
+                continue
+            if event:
+                logger.info("Barge-in detected; stopping playback")
+                barge_in_event.set()
+                self._playback.stop()
+                return
+
+    def _wait_for_playback_or_barge_in(self, barge_in_event: threading.Event) -> bool:
+        while self._playback.is_playing():
+            if barge_in_event.wait(timeout=self._playback_poll_interval_s):
+                self._playback.stop()
+                return True
+        return barge_in_event.is_set()
 
     def _now_ms(self) -> int:
         return int(time.monotonic() * 1000)

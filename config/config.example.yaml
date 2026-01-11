@@ -1,0 +1,81 @@
+audio:
+  sample_rate_hz: 16000
+  channels: 1
+  frame_duration_ms: 20
+  device: null
+  pre_roll_ms: 400
+  max_record_seconds: 8
+  record_silence_ms: 800
+  vad_mode: 2
+wakeword:
+  model_path: "models/wakeword.onnx"
+  inference_window_ms: 80
+  score_threshold: 0.6
+  wakeword_cooldown_ms: 1500
+routing:
+  max_fallbacks: 2
+  stt_providers:
+    - name: "local-stt"
+      provider_type: "http"
+      endpoint: "http://localhost:8001/stt"
+      timeout_s: 15
+      api_key_env: "STT_API_KEY"
+      max_failures: 2
+      cooldown_s: 60
+      audio_formats: ["wav"]
+    # - name: "lan-stt"
+    #   provider_type: "lan_http"
+    #   endpoint: "http://<lan-ip>/v1"
+    #   timeout_s: 15
+    #   api_key_env: null
+    #   max_failures: 2
+    #   cooldown_s: 60
+    #   audio_formats: ["wav"]
+  llm_providers:
+    - name: "local-llm"
+      provider_type: "http"
+      endpoint: "http://localhost:8002/llm"
+      timeout_s: 20
+      api_key_env: "LLM_API_KEY"
+      max_failures: 2
+      cooldown_s: 60
+    # - name: "echo-llm"
+    #   provider_type: "local_echo"
+    #   # endpoint: (omit)
+    #   timeout_s: 1
+    #   api_key_env: null
+    #   max_failures: 2
+    #   cooldown_s: 5
+  tts_providers:
+    - name: "local-tts"
+      provider_type: "http"
+      endpoint: "http://localhost:8003/tts"
+      timeout_s: 20
+      api_key_env: "TTS_API_KEY"
+      max_failures: 2
+      cooldown_s: 60
+    # - name: "lan-tts"
+    #   provider_type: "lan_http"
+    #   endpoint: "http://<lan-ip>/v1"
+    #   timeout_s: 20
+    #   api_key_env: null
+    #   max_failures: 2
+    #   cooldown_s: 60
+logging:
+  level: "INFO"
+  module_levels:
+    voiceassistant.wakeword.service: "INFO"
+conversation:
+  enabled: true
+  max_turns: 6
+  max_chars: 4000
+  reset_after_idle_s: 300
+  reset_commands:
+    - "reset conversation"
+    - "forget this"
+    - "clear memory"
+  persistence:
+    enabled: false
+    path: "/var/lib/voiceassistant/conversation.json"
+wake_beep_path: "assets/wake_beep.wav"
+record_output_path: "/tmp/last_command.wav"

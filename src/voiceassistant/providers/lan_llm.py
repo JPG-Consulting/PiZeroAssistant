@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Optional
+from typing import Iterator, Optional
 
 import requests
 
@@ -101,3 +101,69 @@ class LanHttpLLMProvider(HttpProvider):
             )
         logger.debug("LLM provider %s streamed %d chars", self.name, total_chars)
         return LLMResponse(text=full_text)
+
+    def stream(self, request: LLMRequest) -> Iterator[str]:
+        """
+        Streams text fragments from the LLM.
+
+        This method should:
+        - Yield incremental fragments of text.
+        - Finish with a "[DONE]" marker.
+        """
+        payload = {"messages": request.messages, "stream": True}
+        try:
+            resp = requests.post(
+                f"{self.endpoint.rstrip('/')}/chat/completions",
+                headers=self._headers(),
+                json=payload,
+                timeout=(self.timeout_s, None),  # disable read timeout for streaming LLMs
+                stream=True,
+            )
+        except requests.RequestException as exc:
+            raise ProviderError(str(exc)) from exc
+
+        if resp.status_code != 200:
+            snippet = resp.text.strip().replace("\n", " ")
+            if len(snippet) > 200:
+                snippet = f"{snippet[:200]}..."
+            message = f"HTTP {resp.status_code}"
+            if snippet:
+                message = f"{message}: {snippet}"
+            resp.close()
+            raise ProviderError(message)
+
+        emitted = False
+        try:
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:") :].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    payload = json.loads(data)
+                except ValueError as exc:
+                    raise ProviderError("Invalid JSON in LLM stream") from exc
+                choices = payload.get("choices", [])
+                for choice in choices:
+                    delta = choice.get("delta") or {}
+                    fragment = delta.get("content")
+                    if not fragment:
+                        continue
+                    emitted = True
+                    yield fragment
+        except requests.RequestException as exc:
+            raise ProviderError(str(exc)) from exc
+        finally:
+            resp.close()
+
+        if not emitted:
+            response = self.complete(request)
+            if response.text:
+                yield response.text
+        yield ""

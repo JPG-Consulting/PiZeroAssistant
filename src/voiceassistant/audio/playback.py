@@ -60,6 +60,12 @@ class PlaybackController:
             audio = self._coerce_audio_stream(request)
             if audio is None:
                 return
+            logger.debug(
+                "Playback audio format=%s sample_rate_hz=%s channels=%s",
+                audio.format,
+                audio.sample_rate_hz,
+                audio.channels,
+            )
             stream = sd.RawOutputStream(
                 samplerate=audio.sample_rate_hz,
                 channels=audio.channels,
@@ -67,14 +73,36 @@ class PlaybackController:
             )
             with stream:
                 decoder = decode_to_pcm_stream(audio)
+                total_bytes = 0
+                chunk_count = 0
+                stopped = False
                 for chunk in decoder:
                     # Stop latency is bounded by the decoder select timeout (~100ms);
                     # this trade-off keeps barge-in responsive without busy-looping.
                     if self._stop_event.is_set():
+                        logger.debug("Playback stop event set; halting stream write")
+                        stopped = True
                         break
                     if not chunk:
                         continue
                     stream.write(chunk)
+                    total_bytes += len(chunk)
+                    chunk_count += 1
+                if stopped:
+                    logger.debug(
+                        "Playback stopped after %d chunks (%d bytes)",
+                        chunk_count,
+                        total_bytes,
+                    )
+                else:
+                    logger.debug(
+                        "Playback decoder completed after %d chunks (%d bytes)",
+                        chunk_count,
+                        total_bytes,
+                    )
+                    # Explicit stop/close ordering helps drain buffered audio on EOF.
+                    stream.stop()
+                    stream.close()
         except FFMpegDecodeError as exc:
             logger.exception("Failed to decode audio for playback: %s", exc)
         except wave.Error:

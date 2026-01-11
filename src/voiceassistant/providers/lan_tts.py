@@ -9,8 +9,12 @@ from typing import Iterator, Optional
 import requests
 
 from voiceassistant.audio.stream import AudioStream
+from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import ProviderError
 from voiceassistant.providers.http import HttpProvider, TTSResponse
+
+
+logger = get_logger(__name__)
 
 
 class LanHttpTTSProvider(HttpProvider):
@@ -61,6 +65,11 @@ class LanHttpTTSProvider(HttpProvider):
 
         content_type = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
         audio_format = self._infer_format(content_type)
+        logger.debug(
+            "LAN TTS content-type=%s inferred_format=%s",
+            content_type,
+            audio_format,
+        )
         sample_rate_hz = self._parse_int_header(
             resp.headers.get("X-Audio-Sample-Rate"),
             self._DEFAULT_SAMPLE_RATE_HZ,
@@ -173,18 +182,41 @@ class _ResponseAudioStream:
         self._closed = False
 
     def iter_chunks(self) -> Iterator[bytes]:
+        chunk_count = 0
+        total_bytes = 0
         try:
             if self._prefix:
+                chunk_count += 1
+                total_bytes += len(self._prefix)
+                logger.debug(
+                    "LAN TTS chunk %d size=%d bytes",
+                    chunk_count,
+                    len(self._prefix),
+                )
                 yield self._prefix
                 self._prefix = b""
             for chunk in self._iterator:
                 if chunk:
+                    chunk_count += 1
+                    total_bytes += len(chunk)
+                    if chunk_count <= 10 or chunk_count % 50 == 0:
+                        logger.debug(
+                            "LAN TTS chunk %d size=%d bytes",
+                            chunk_count,
+                            len(chunk),
+                        )
                     yield chunk
         finally:
+            logger.debug(
+                "LAN TTS stream completed chunks=%d total_bytes=%d",
+                chunk_count,
+                total_bytes,
+            )
             self.close()
 
     def close(self) -> None:
         if self._closed:
             return
+        logger.debug("LAN TTS stream closing response")
         self._closed = True
         self._response.close()

@@ -37,7 +37,7 @@ class LanHttpLLMProvider(HttpProvider):
                 f"{self.endpoint.rstrip('/')}/chat/completions",
                 headers=self._headers(),
                 json=payload,
-                timeout=self.timeout_s,
+                timeout=(self.timeout_s, None),  # disable read timeout for streaming LLMs
                 stream=True,
             )
         except requests.RequestException as exc:

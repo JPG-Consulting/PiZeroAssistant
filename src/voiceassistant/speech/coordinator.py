@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
 from voiceassistant.speech.boundary import BoundaryDecision, BoundaryEvaluator
+from voiceassistant.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -91,6 +95,7 @@ class IncrementalSpeechCoordinator:
         if self.cancelled:
             return
         while len(self.pending_chunks) < self._max_pending_chunks:
+            boundary_start = time.monotonic()
             decision = self._evaluator.evaluate(
                 buffer=self.buffer,
                 last_commit_idx=self.last_commit_idx,
@@ -100,6 +105,21 @@ class IncrementalSpeechCoordinator:
                 inside_code_block=self.inside_code_block,
                 llm_completed=self.llm_completed,
             )
+            boundary_elapsed = time.monotonic() - boundary_start
+            uncommitted_len = max(0, len(self.buffer) - self.last_commit_idx)
+            logger.debug(
+                "Boundary evaluation took %.3f s (kind=%s, reason=%s, buffer_len=%d, uncommitted_len=%d)",
+                boundary_elapsed,
+                decision.kind,
+                decision.reason,
+                len(self.buffer),
+                uncommitted_len,
+            )
+            if boundary_elapsed > 0.05:
+                logger.debug(
+                    "Potential bottleneck: boundary evaluation took %.3f s",
+                    boundary_elapsed,
+                )
             if decision.kind != "commit":
                 return
             commit_upto = decision.commit_upto

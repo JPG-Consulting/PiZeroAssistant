@@ -196,9 +196,28 @@ class AssistantStateMachine:
 
     def _run_tts(self, text: str) -> TTSResponse:
         self._state = AssistantState.TTS
-        response, provider_name = self._tts_router.call(lambda provider: provider.synthesize(text))
-        logger.info("TTS complete via %s", provider_name)
-        return response
+        attempts = 2
+        last_error: ProviderError | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                response, provider_name = self._tts_router.call(
+                    lambda provider: provider.synthesize(text)
+                )
+                logger.info("TTS complete via %s", provider_name)
+                return response
+            except ProviderError as exc:
+                last_error = exc
+                logger.warning(
+                    "TTS provider failed (attempt %d/%d): %s",
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                if attempt < attempts:
+                    time.sleep(0.2)
+        if last_error is not None:
+            raise last_error
+        raise ProviderError("TTS provider failed without an error")
 
     def _build_wav_bytes(self, result: RecordingResult) -> bytes:
         buffer = io.BytesIO()

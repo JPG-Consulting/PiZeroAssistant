@@ -62,9 +62,6 @@ class BoundaryEvaluator:
         if inside_code_block:
             return BoundaryDecision(kind="wait", reason="inside_code_block")
 
-        if self._ends_with_partial_word(buffer, llm_completed=llm_completed):
-            return BoundaryDecision(kind="wait", reason="partial_word_tail")
-
         uncommitted = buffer[last_commit_idx:]
         code_spans, has_unclosed = self._code_block_spans(uncommitted)
         if has_unclosed:
@@ -82,7 +79,9 @@ class BoundaryEvaluator:
             commit_offset, confidence, reason = candidate
             commit_idx = last_commit_idx + commit_offset
             if commit_idx > last_commit_idx:
-                if settle_ok or llm_completed:
+                trailing_text = uncommitted[commit_offset:]
+                has_trailing_text = bool(trailing_text.strip())
+                if settle_ok or llm_completed or has_trailing_text:
                     return BoundaryDecision(
                         kind="commit",
                         commit_upto=commit_idx,
@@ -133,6 +132,9 @@ class BoundaryEvaluator:
                     confidence="fallback",
                     reason="eos_fallback",
                 )
+
+        if self._ends_with_partial_word(buffer, llm_completed=llm_completed):
+            return BoundaryDecision(kind="wait", reason="partial_word_tail")
 
         return BoundaryDecision(kind="wait", reason="no_boundary")
 

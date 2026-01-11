@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 import io
+import logging
 import queue
 import time
 import wave
@@ -286,59 +287,67 @@ class AssistantStateMachine:
 
     def _play_chunks(self, chunks: list[SpeakableChunk]) -> bool:
         for chunk in chunks:
-            logger.debug("TTS chunk: %r", chunk.text)
-            chunk_start = time.monotonic()
-            tts_start = time.monotonic()
+            debug_enabled = logger.isEnabledFor(logging.DEBUG)
+            if debug_enabled:
+                logger.debug("TTS chunk: %r", chunk.text)
+                chunk_start = time.monotonic()
+                tts_start = time.monotonic()
+                logger.debug("TTS request started at %.6f", tts_start)
             tts_response = self._run_tts(chunk.text)
-            tts_end = time.monotonic()
-            tts_latency = tts_end - tts_start
-            wav_size = len(tts_response.wav_bytes) if tts_response.wav_bytes else 0
-            has_audio_stream = tts_response.audio is not None
-            logger.debug(
-                "TTS response received (latency=%.3f s, wav_bytes=%d, audio_stream=%s)",
-                tts_latency,
-                wav_size,
-                has_audio_stream,
-            )
-            if tts_latency > 1.0:
+            if debug_enabled:
+                tts_end = time.monotonic()
+                tts_latency = tts_end - tts_start
+                wav_size = len(tts_response.wav_bytes) if tts_response.wav_bytes else 0
+                has_audio_stream = tts_response.audio is not None
                 logger.debug(
-                    "Potential bottleneck: TTS synthesis took %.3f s (network or provider latency)",
+                    "TTS response received (latency=%.3f s, wav_bytes=%d, audio_stream=%s)",
                     tts_latency,
+                    wav_size,
+                    has_audio_stream,
                 )
-            playback_start = time.monotonic()
-            tts_to_playback_latency = playback_start - tts_start
-            logger.debug(
-                "TTS to playback latency for chunk: %.3f s",
-                tts_to_playback_latency,
-            )
+                if tts_latency > 1.0:
+                    logger.debug(
+                        "Potential bottleneck: TTS synthesis took %.3f s (network or provider latency)",
+                        tts_latency,
+                    )
+                playback_start = time.monotonic()
+                tts_to_playback_latency = playback_start - tts_start
+                logger.debug("Playback start at %.6f", playback_start)
+                logger.debug(
+                    "TTS to playback latency for chunk: %.3f s",
+                    tts_to_playback_latency,
+                )
             self._playback.play(
                 PlaybackRequest(
                     wav_bytes=tts_response.wav_bytes,
                     audio=tts_response.audio,
                 )
             )
-            logger.debug("Starting playback for chunk.")
-            monitor_start = time.monotonic()
+            if debug_enabled:
+                logger.debug("Starting playback for chunk.")
+                monitor_start = time.monotonic()
             interrupted = self._monitor_playback()
-            monitor_elapsed = time.monotonic() - monitor_start
-            logger.debug(
-                "Playback monitoring took %.3f s for chunk",
-                monitor_elapsed,
-            )
-            if monitor_elapsed > 2.0:
+            if debug_enabled:
+                monitor_elapsed = time.monotonic() - monitor_start
                 logger.debug(
-                    "Potential bottleneck: playback monitoring took %.3f s (long audio or output latency)",
+                    "Playback monitoring took %.3f s for chunk",
                     monitor_elapsed,
                 )
-            total_elapsed = time.monotonic() - chunk_start
-            logger.debug(
-                "Total TTS chunk processing time: %.3f s (tts=%.3f s, playback=%.3f s)",
-                total_elapsed,
-                tts_latency,
-                monitor_elapsed,
-            )
+                if monitor_elapsed > 2.0:
+                    logger.debug(
+                        "Potential bottleneck: playback monitoring took %.3f s (long audio or output latency)",
+                        monitor_elapsed,
+                    )
+                total_elapsed = time.monotonic() - chunk_start
+                logger.debug(
+                    "Total TTS chunk processing time: %.3f s (tts=%.3f s, playback=%.3f s)",
+                    total_elapsed,
+                    tts_latency,
+                    monitor_elapsed,
+                )
             if interrupted:
-                logger.debug("Playback interrupted by barge-in.")
+                if debug_enabled:
+                    logger.debug("Playback interrupted by barge-in.")
                 return True
         return False
 

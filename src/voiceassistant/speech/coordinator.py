@@ -114,6 +114,7 @@ class IncrementalSpeechCoordinator:
                     confidence=decision.confidence,
                     reason=decision.reason,
                 )
+            )
             self.last_commit_idx = commit_upto
             self.last_commit_ms = now_ms
 

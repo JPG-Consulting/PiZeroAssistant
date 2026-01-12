@@ -170,6 +170,10 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Early validation for incompatible options
   - Clear, actionable error messages
 
+## UX / Hardware (optional, non-blocking)
+
+- [ ] Optional: richer LED patterns or audio-reactive effects (post-v1)
+
 ## Long-term (optional, non-blocking)
 
 - [ ] Streaming STT (opt-in, not default)

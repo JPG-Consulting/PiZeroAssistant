@@ -28,6 +28,7 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
             yield chunk
         remainder = total_bytes % frame_size
         if remainder:
+            # Pad to full PCM frames to prevent audio truncation at stream end (PortAudio drops partial frames).
             yield b"\x00" * (frame_size - remainder)
         return
 
@@ -172,6 +173,7 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
                 raise FFMpegDecodeError(message)
             remainder = total_stdout_bytes % frame_size
             if remainder:
+                # Pad to full PCM frames to prevent audio truncation at stream end (PortAudio drops partial frames).
                 yield b"\x00" * (frame_size - remainder)
     except GeneratorExit:
         stop_event.set()

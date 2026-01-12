@@ -50,6 +50,13 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Document that providers must not store chat history
   - Clarify difference between provider logic and state-machine-owned memory
 
+- [ ] **LLM token budgeting (future)**
+
+  - Per-provider rolling budgets (hour/day)
+  - Router-enforced cooldown on budget exhaustion
+  - Provider-reported vs estimated token accounting
+  - Optional spoken UX feedback
+
 - [x] **Skip LLM/TTS execution on empty STT transcript (token-safe behavior)**
 - [x] **Documented STT empty-transcript contract (empty text is valid; missing text is an error)**
 
@@ -82,6 +89,8 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 - [x] **MP3/OPUS incremental decoding**
 
 - [x] **Streaming TTS playback**
+
+- [x] **Application-owned system prompt (explicit, voice-first)**
 
 - [ ] **Investigate/validate no-truncation playback for streaming TTS (ensure tail not cut off)**
 
@@ -148,6 +157,8 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Tests that verify fallback-to-English behavior
   - Applies only to assistant-generated TTS output; user transcripts remain language-agnostic
   - Providers must not handle translation or localization; no cloud translation dependencies
+
+- [ ] **Language-specific system prompts (explicitly deferred)**
 
 ## Medium-term (stability and usability)
 

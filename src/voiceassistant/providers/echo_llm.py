@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from voiceassistant.providers.base import LLMRequest, Provider, ProviderError
+from voiceassistant.providers.base import LLMRequest, Provider, ProviderError, build_messages_with_system
 from voiceassistant.providers.http import LLMResponse
 
 
@@ -13,7 +13,7 @@ class LocalEchoLLMProvider(Provider):
         self.name = name
 
     def complete(self, req: LLMRequest) -> LLMResponse:
-        messages = req.messages
+        messages = build_messages_with_system(req.messages, req.system_prompt)
         if not isinstance(messages, list):
             raise ProviderError("LLM request messages must be a list")
         for message in reversed(messages):

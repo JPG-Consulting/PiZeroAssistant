@@ -69,7 +69,7 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
 
 - **STT providers** accept WAV audio and return transcribed text.
   STT providers may return an empty transcript (`""`) to indicate silence or no detected speech; this is not an error. Missing or malformed `text` fields are treated as provider failures.
-- **LLM providers** accept an explicit message list (`LLMRequest.messages`) and return response text.
+- **LLM providers** accept an explicit message list (`LLMRequest.messages`) plus an explicit system prompt (`LLMRequest.system_prompt`) and return response text.
   **LLM providers must not retain conversational history or dialogue state.** Each call must be treated as an independent completion; providers must not store prompts, responses, or message history across requests.
   - LLM providers may stream internally for latency improvements, but they still return a single `LLMResponse` text payload to the state machine.
   - Incremental speech and sentence boundary decisions belong to the state machine, not the provider.
@@ -83,6 +83,33 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
 All providers are synchronous and must raise `ProviderError` on failure. “Stateless” means providers must not retain cross-request conversational, audio, or session state (no carried-over context, buffers, or history). Providers may still read configuration, keep internal helpers, and use per-call transient state.
 
 **Conversational memory placement:** Conversational memory is owned by the state machine and supplied explicitly with each LLM request. Providers remain unaware of dialogue continuity and must never implement provider-side chat history. Persistence, when enabled, is local-only and opt-in.
+
+### LLM token limits (Phase 1)
+
+- The application MAY configure a per-request maximum token limit for LLM providers.
+- Token limits are a routing/request policy, not a provider responsibility.
+- Providers remain stateless and must not track usage.
+- If a provider supports a native `max_tokens` (or equivalent) parameter, it is used.
+- If a provider does not support native limits, Phase 1 does not enforce bounds on responses.
+- Absence of a configured limit means unbounded behavior (current default).
+- Rolling budgets, time windows, and usage accounting are explicitly out of scope for Phase 1.
+
+#### Future design: Phase 2 token budgeting (not implemented)
+
+- Phase 2 introduces per-provider token budgets (hour/day).
+- Enforcement remains application-owned (router-level), not provider-owned.
+- Providers remain stateless and unaware of budgets.
+- Token accounting may use provider-reported usage when available, with deterministic estimation as a fallback.
+- Providers exceeding budget enter a cooldown state, similar to failure-based cooldowns.
+- Optional user-facing UX feedback (spoken warnings) may be added later.
+- Phase 2 is intentionally deferred to avoid complexity in Phase 1.
+
+### System prompt ownership
+
+- The system prompt is application-owned and always passed explicitly with every LLM call.
+- The prompt is loaded from `assets/prompts/system.md`.
+- If the asset is missing or empty, a built-in default from `src/voiceassistant/llm/prompts.py` is used.
+- The assistant is voice-first; all responses are optimized for text-to-speech playback.
 
 ### Provider capabilities (audio formats)
 

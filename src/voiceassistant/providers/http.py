@@ -10,7 +10,7 @@ import requests
 
 from voiceassistant.audio.stream import AudioStream, BytesAudioStream
 from voiceassistant.logging_config import get_logger
-from voiceassistant.providers.base import LLMRequest, Provider, ProviderError
+from voiceassistant.providers.base import LLMRequest, Provider, ProviderError, build_messages_with_system
 
 logger = get_logger(__name__)
 
@@ -76,7 +76,7 @@ class HttpSTTProvider(HttpProvider):
 
 class HttpLLMProvider(HttpProvider):
     def complete(self, req: LLMRequest) -> LLMResponse:
-        payload = {"messages": req.messages}
+        payload = {"messages": build_messages_with_system(req.messages, req.system_prompt)}
         try:
             resp = requests.post(
                 self.endpoint,

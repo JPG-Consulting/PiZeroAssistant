@@ -9,6 +9,14 @@ from typing import Optional
 @dataclass(frozen=True)
 class LLMRequest:
     messages: list[dict]
+    system_prompt: str
+    max_tokens: Optional[int] = None
+
+
+def build_messages_with_system(messages: list[dict], system_prompt: str) -> list[dict]:
+    if not system_prompt:
+        return messages
+    return [{"role": "system", "content": system_prompt}, *messages]
 
 
 @dataclass

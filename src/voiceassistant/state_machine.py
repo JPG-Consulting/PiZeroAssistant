@@ -12,10 +12,11 @@ from voiceassistant.audio.playback import PlaybackController, PlaybackRequest
 from voiceassistant.audio.recorder import Recorder, RecordingResult
 from voiceassistant.conversation.memory import ConversationMemory
 from voiceassistant.config import AppConfig
-from voiceassistant.llm.prompts import RESET_ACK_TEXT, SYSTEM_PROMPT
+from voiceassistant.llm.prompts import RESET_ACK_TEXT, get_system_prompt
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import LLMRequest, ProviderError
-from voiceassistant.providers.http import TTSResponse
+from voiceassistant.providers.http import LLMResponse, TTSResponse
+from voiceassistant.providers.llm import LLMProvider
 from voiceassistant.providers.factory import (
     build_llm_provider,
     build_stt_provider,
@@ -64,15 +65,23 @@ class AssistantStateMachine:
             ],
             max_fallbacks=config.routing.max_fallbacks,
         )
-        self._llm_router = ProviderRouter(
-            providers=[
+        self._llm_limits: dict[str, tuple[Optional[int], bool]] = {}
+        llm_providers = []
+        for cfg in config.routing.llm_providers:
+            provider = build_llm_provider(cfg)
+            self._llm_limits[provider.name] = (
+                cfg.max_tokens_per_request,
+                cfg.provider_type == "lan_http",
+            )
+            llm_providers.append(
                 RoutedProvider(
-                    provider=build_llm_provider(cfg),
+                    provider=provider,
                     max_failures=cfg.max_failures,
                     cooldown_s=cfg.cooldown_s,
                 )
-                for cfg in config.routing.llm_providers
-            ],
+            )
+        self._llm_router = ProviderRouter(
+            providers=llm_providers,
             max_fallbacks=config.routing.max_fallbacks,
         )
         self._tts_router = ProviderRouter(
@@ -145,17 +154,14 @@ class AssistantStateMachine:
                 reply = RESET_ACK_TEXT
             else:
                 self._conversation_memory.add_user(transcript)
-                messages = [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    *self._conversation_memory.build_messages(),
-                ]
+                messages = self._conversation_memory.build_messages()
                 total_chars = sum(len(message["content"]) for message in messages)
                 logger.debug(
                     "LLM request: %d messages, %d characters",
                     len(messages),
                     total_chars,
                 )
-                reply = self._run_llm(messages)
+                reply = self._run_llm(messages, get_system_prompt())
                 self._conversation_memory.add_assistant(reply)
                 self._conversation_memory.persist_if_enabled()
             tts_response = self._run_tts(reply)
@@ -214,20 +220,42 @@ class AssistantStateMachine:
         )
         return response.text, provider_name
 
-    def _run_llm(self, messages: list[dict]) -> str:
+    def _run_llm(self, messages: list[dict], system_prompt: str) -> str:
         self._state = AssistantState.LLM
-        response, provider_name = self._llm_router.call(
-            lambda provider: provider.complete(LLMRequest(messages=messages))
+        logger.debug(
+            "Using system prompt (present=%s, chars=%d)",
+            bool(system_prompt),
+            len(system_prompt),
         )
+
+        def _invoke(provider: LLMProvider) -> LLMResponse:
+            max_tokens, supports_native = self._llm_limits.get(
+                provider.name,
+                (None, False),
+            )
+            # Phase 1 applies limits only via native max_tokens support.
+            # Non-native providers ignore limits in Phase 1 to avoid incorrect
+            # token estimation/truncation and TTS regressions; Phase 2 handles budgeting.
+            request = LLMRequest(
+                messages=messages,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens if supports_native else None,
+            )
+            return provider.complete(request)
+
+        response, provider_name = self._llm_router.call(_invoke)
         logger.info("LLM complete via %s", provider_name)
         return response.text
 
     def _run_tts(self, text: str) -> TTSResponse:
         self._state = AssistantState.TTS
         logger.debug('TTS input text (chars=%d): "%s"', len(text), text)
-        response, provider_name = self._tts_router.call(lambda provider: provider.synthesize(text))
+        response, provider_name = self._tts_router.call(
+            lambda provider: provider.synthesize(text)
+        )
         logger.info("TTS complete via %s", provider_name)
         return response
+
 
     def _build_wav_bytes(self, result: RecordingResult) -> bytes:
         buffer = io.BytesIO()

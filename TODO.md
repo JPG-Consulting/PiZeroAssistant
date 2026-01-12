@@ -83,6 +83,8 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
 - [x] **Streaming TTS playback**
 
+- [x] **Application-owned system prompt (explicit, voice-first)**
+
 - [ ] **Investigate/validate no-truncation playback for streaming TTS (ensure tail not cut off)**
 
 - [ ] **Add completeness tests for ffmpeg decoding (tail samples non-zero)**
@@ -148,6 +150,8 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Tests that verify fallback-to-English behavior
   - Applies only to assistant-generated TTS output; user transcripts remain language-agnostic
   - Providers must not handle translation or localization; no cloud translation dependencies
+
+- [ ] **Language-specific system prompts (explicitly deferred)**
 
 ## Medium-term (stability and usability)
 

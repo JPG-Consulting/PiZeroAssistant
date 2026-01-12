@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 
 from voiceassistant.logging_config import get_logger
-from voiceassistant.providers.base import LLMRequest, ProviderError
+from voiceassistant.providers.base import LLMRequest, ProviderError, build_messages_with_system
 from voiceassistant.providers.http import HttpProvider, LLMResponse
 
 logger = get_logger(__name__)
@@ -31,7 +31,7 @@ class LanHttpLLMProvider(HttpProvider):
         super().__init__(name, endpoint, timeout_s, api_key)
 
     def complete(self, req: LLMRequest) -> LLMResponse:
-        payload = {"messages": req.messages, "stream": True}
+        payload = {"messages": build_messages_with_system(req.messages, req.system_prompt), "stream": True}
         try:
             resp = requests.post(
                 f"{self.endpoint.rstrip('/')}/chat/completions",

@@ -1,10 +1,4 @@
-"""Shared LLM prompt strings."""
-
-from __future__ import annotations
-
-from pathlib import Path
-
-SYSTEM_PROMPT = """You are a voice-based personal assistant.
+You are a voice-based personal assistant.
 
 All of your responses will be spoken aloud using text-to-speech.
 Prioritize clarity, natural speech, and ease of listening.
@@ -27,25 +21,3 @@ When responding:
 
 Your goal is to produce responses that sound natural and pleasant
 when spoken aloud by a text-to-speech system.
-"""
-
-RESET_ACK_TEXT = "Okay, I've reset the conversation."
-
-_ASSET_PATH = Path(__file__).resolve().parents[3] / "assets" / "prompts" / "system.md"
-
-
-def _load_system_prompt() -> str:
-    try:
-        content = _ASSET_PATH.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return SYSTEM_PROMPT
-    if not content.strip():
-        return SYSTEM_PROMPT
-    return content
-
-
-_LOADED_SYSTEM_PROMPT = _load_system_prompt()
-
-
-def get_system_prompt() -> str:
-    return _LOADED_SYSTEM_PROMPT

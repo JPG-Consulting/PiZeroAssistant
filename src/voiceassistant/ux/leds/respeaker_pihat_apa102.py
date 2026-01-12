@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import threading
 import time
 from dataclasses import dataclass
@@ -12,6 +13,12 @@ from voiceassistant.ux.events import UxEvent
 from voiceassistant.ux.leds.base import LedUxBackend
 
 logger = get_logger(__name__)
+
+_APA102_SPEC = importlib.util.find_spec("apa102_pi.driver")
+if _APA102_SPEC is not None:
+    from apa102_pi.driver import APA102
+else:
+    APA102 = None
 
 OFF = (0, 0, 0)
 WHITE = (180, 180, 180)
@@ -58,13 +65,59 @@ class _NoOpDriver(_Driver):
         return None
 
 
+class _Apa102Driver(_Driver):
+    def __init__(self) -> None:
+        if APA102 is None:
+            raise RuntimeError("APA102 driver unavailable")
+        self._strip = APA102(num_led=LED_COUNT, spi_bus=0, spi_device=0)
+
+    def set_pixels(self, colors: Iterable[Tuple[int, int, int]]) -> None:
+        try:
+            color_list = list(colors)
+            for index in range(LED_COUNT):
+                red, green, blue = OFF
+                if index < len(color_list):
+                    red, green, blue = color_list[index]
+                self._strip.set_pixel(index, red, green, blue)
+            self._strip.show()
+        except Exception:
+            logger.exception("APA102 driver failed while setting pixels")
+
+    def clear(self) -> None:
+        try:
+            self._strip.clear_strip()
+            self._strip.show()
+        except Exception:
+            logger.exception("APA102 driver failed while clearing LEDs")
+
+    def close(self) -> None:
+        try:
+            self.clear()
+            cleanup = getattr(self._strip, "cleanup", None)
+            if callable(cleanup):
+                cleanup()
+        except Exception:
+            logger.exception("APA102 driver failed while closing")
+
+
 class RespeakerPiHatApa102Backend(LedUxBackend):
     """Best-effort LED backend for the ReSpeaker Pi HAT."""
 
     def __init__(self, driver: Optional[_Driver] = None) -> None:
-        self._driver = driver or _NoOpDriver()
-        if driver is None:
+        if driver is not None:
+            self._driver = driver
+        elif APA102 is not None:
+            try:
+                self._driver = _Apa102Driver()
+            except Exception:
+                logger.warning(
+                    "APA102 LED driver unavailable; using no-op backend",
+                    exc_info=True,
+                )
+                self._driver = _NoOpDriver()
+        else:
             logger.warning("APA102 LED driver unavailable; using no-op backend")
+            self._driver = _NoOpDriver()
         self._lock = threading.Lock()
         self._condition = threading.Condition(self._lock)
         self._pending_pattern: Optional[_Pattern] = None

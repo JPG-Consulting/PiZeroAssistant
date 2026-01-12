@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from threading import Thread
-from typing import Callable, List
+from typing import List, Protocol
 
 from voiceassistant.logging_config import get_logger
 from voiceassistant.ux.events import UxEvent
@@ -11,7 +11,9 @@ from voiceassistant.ux.events import UxEvent
 logger = get_logger(__name__)
 
 
-BackendHandler = Callable[[UxEvent], None]
+class BackendHandler(Protocol):
+    def handle_event(self, event: UxEvent) -> None:
+        ...
 
 
 class UXManager:
@@ -41,6 +43,6 @@ class UXManager:
 
     def _dispatch(self, handler: BackendHandler, event: UxEvent) -> None:
         try:
-            handler(event)
+            handler.handle_event(event)
         except Exception as exc:  # noqa: BLE001 - must never raise
             logger.warning("UX backend failed for event %s: %s", event, exc)

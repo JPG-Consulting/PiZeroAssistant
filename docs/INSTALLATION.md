@@ -74,3 +74,23 @@ conversation:
 ```
 
 The file is stored locally on disk at the configured path and is never transmitted. To disable persistence, set `conversation.persistence.enabled` back to `false` (or remove the stanza). When disabled, no disk I/O occurs for conversation history.
+
+## Optional: ReSpeaker Pi HAT LED support
+
+LED support is optional. It requires a ReSpeaker Pi HAT (APA102 LEDs), SPI enabled, and the `apa102-pi` Python package.
+
+Install the driver:
+
+```bash
+pip install apa102-pi
+```
+
+Enable SPI, then reboot:
+
+```bash
+sudo raspi-config
+# Interface Options → SPI → Enable
+sudo reboot
+```
+
+If these requirements are missing, the assistant still runs normally; LEDs remain off and the backend logs a warning. No configuration flags are required.

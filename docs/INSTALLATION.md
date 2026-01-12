@@ -77,13 +77,7 @@ The file is stored locally on disk at the configured path and is never transmitt
 
 ## Optional: ReSpeaker Pi HAT LED support
 
-LED support is optional. It requires a ReSpeaker Pi HAT (APA102 LEDs), SPI enabled, and the `apa102-pi` Python package.
-
-Install the driver:
-
-```bash
-pip install apa102-pi
-```
+LED support is optional. The ReSpeaker Pi HAT (APA102) LEDs use the Raspberry Pi SPI interface via native `spidev`, with best-effort behavior that automatically falls back to a no-op backend if SPI or `spidev` is unavailable. No configuration flags are required.
 
 Enable SPI, then reboot:
 
@@ -93,4 +87,10 @@ sudo raspi-config
 sudo reboot
 ```
 
-If these requirements are missing, the assistant still runs normally; LEDs remain off and the backend logs a warning. No configuration flags are required.
+On Raspberry Pi OS, `spidev` is usually available by default. If it is missing, install it via:
+
+```bash
+sudo apt install python3-spidev
+```
+
+If SPI or `spidev` is unavailable, the assistant still runs normally; LEDs remain off and the backend logs a warning.

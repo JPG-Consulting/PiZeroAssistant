@@ -22,6 +22,8 @@ from voiceassistant.providers.factory import (
     build_tts_provider,
 )
 from voiceassistant.providers.router import ProviderRouter, RoutedProvider
+from voiceassistant.ux.events import UxEvent
+from voiceassistant.ux.manager import UXManager
 from voiceassistant.wakeword.service import WakewordEvent
 
 logger = get_logger(__name__)
@@ -90,12 +92,15 @@ class AssistantStateMachine:
             "Conversation persistence enabled: %s",
             self._conversation_memory.persistence_enabled,
         )
+        self._ux_manager = UXManager()
+        self._emit_ux(UxEvent.ASSISTANT_READY)
 
     def stop(self) -> None:
         self._running = False
 
     def run_forever(self) -> None:
         logger.info("Assistant entering IDLE")
+        self._emit_ux(UxEvent.ASSISTANT_IDLE)
         while self._running:
             try:
                 event = self._wakeword_events.get(timeout=0.1)
@@ -106,17 +111,21 @@ class AssistantStateMachine:
 
     def _handle_wake(self, event: WakewordEvent) -> None:
         logger.info("Wake event received")
+        self._emit_ux(UxEvent.WAKE_DETECTED)
         self._state = AssistantState.WAKE
         if self.config.wake_beep_path:
             self._play_beep(self.config.wake_beep_path)
         self._state = AssistantState.RECORD
         self._recorder.begin_recording(event.pre_roll_pcm)
+        self._emit_ux(UxEvent.LISTENING)
         result = self._recorder.wait_for_result(timeout_s=self.config.audio.max_record_seconds + 1)
         if not result:
             logger.warning("Recording timed out")
             self._state = AssistantState.IDLE
+            self._emit_ux(UxEvent.ASSISTANT_IDLE)
             return
         self._recorder.save_wav(result, self.config.record_output_path)
+        self._emit_ux(UxEvent.PROCESSING)
 
         try:
             transcript, stt_provider = self._run_stt(result)
@@ -127,6 +136,8 @@ class AssistantStateMachine:
                     stt_provider,
                 )
                 self._state = AssistantState.IDLE
+                self._emit_ux(UxEvent.NO_SPEECH)
+                self._emit_ux(UxEvent.ASSISTANT_IDLE)
                 return
             if self._conversation_memory.check_and_apply_reset(transcript):
                 logger.info("Conversation reset via user command")
@@ -151,13 +162,18 @@ class AssistantStateMachine:
         except ProviderError:
             logger.exception("Provider error in pipeline")
             self._state = AssistantState.IDLE
+            self._emit_ux(UxEvent.ERROR)
+            self._emit_ux(UxEvent.ASSISTANT_IDLE)
             return
         except Exception:  # pragma: no cover - defensive
             logger.exception("Unexpected pipeline error")
             self._state = AssistantState.IDLE
+            self._emit_ux(UxEvent.ERROR)
+            self._emit_ux(UxEvent.ASSISTANT_IDLE)
             return
 
         self._state = AssistantState.TTS
+        self._emit_ux(UxEvent.SPEAKING)
         self._playback.play(
             PlaybackRequest(
                 wav_bytes=tts_response.wav_bytes,
@@ -166,6 +182,7 @@ class AssistantStateMachine:
         )
         self._monitor_playback()
         self._state = AssistantState.IDLE
+        self._emit_ux(UxEvent.ASSISTANT_IDLE)
 
     def _run_stt(self, result: RecordingResult) -> tuple[str, str]:
         self._state = AssistantState.STT
@@ -220,3 +237,9 @@ class AssistantStateMachine:
             logger.warning("Wake beep not found at %s", path)
         except Exception:
             logger.exception("Failed to play wake beep")
+
+    def _emit_ux(self, event: UxEvent) -> None:
+        try:
+            self._ux_manager.emit(event)
+        except Exception:
+            return

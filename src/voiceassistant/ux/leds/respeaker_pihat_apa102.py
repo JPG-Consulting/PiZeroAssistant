@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import threading
 import time
 from dataclasses import dataclass
@@ -13,12 +12,6 @@ from voiceassistant.ux.events import UxEvent
 from voiceassistant.ux.leds.base import LedUxBackend
 
 logger = get_logger(__name__)
-
-_APA102_SPEC = importlib.util.find_spec("apa102_pi.driver.apa102")
-if _APA102_SPEC is not None:
-    from apa102_pi.driver.apa102 import APA102
-else:
-    APA102 = None
 
 OFF = (0, 0, 0)
 WHITE = (180, 180, 180)
@@ -67,35 +60,43 @@ class _NoOpDriver(_Driver):
 
 class _Apa102Driver(_Driver):
     def __init__(self) -> None:
-        if APA102 is None:
-            raise RuntimeError("APA102 driver unavailable")
-        self._strip = APA102(num_led=LED_COUNT, spi_bus=0, spi_device=0)
+        try:
+            import spidev
+        except ImportError as exc:
+            raise RuntimeError("spidev not installed") from exc
+
+        self._spi = spidev.SpiDev()
+        self._spi.open(0, 0)
+        self._spi.mode = 0
+        self._spi.max_speed_hz = 8_000_000
+        logger.info("APA102 LED driver initialized via spidev (bus=0, device=0)")
 
     def set_pixels(self, colors: Iterable[Tuple[int, int, int]]) -> None:
         try:
             color_list = list(colors)
-            for index in range(LED_COUNT):
-                red, green, blue = OFF
-                if index < len(color_list):
-                    red, green, blue = color_list[index]
-                self._strip.set_pixel(index, red, green, blue)
-            self._strip.show()
+            led_colors = [
+                color_list[index] if index < len(color_list) else OFF
+                for index in range(LED_COUNT)
+            ]
+            start_frame = [0x00, 0x00, 0x00, 0x00]
+            led_frames = []
+            for red, green, blue in led_colors:
+                led_frames.extend([0xE0 | 0x1F, blue, green, red])
+            end_frame = [0xFF] * ((LED_COUNT + 15) // 16)
+            self._spi.writebytes(start_frame + led_frames + end_frame)
         except Exception:
             logger.exception("APA102 driver failed while setting pixels")
 
     def clear(self) -> None:
         try:
-            self._strip.clear_strip()
-            self._strip.show()
+            self.set_pixels([OFF] * LED_COUNT)
         except Exception:
             logger.exception("APA102 driver failed while clearing LEDs")
 
     def close(self) -> None:
         try:
             self.clear()
-            cleanup = getattr(self._strip, "cleanup", None)
-            if callable(cleanup):
-                cleanup()
+            self._spi.close()
         except Exception:
             logger.exception("APA102 driver failed while closing")
 
@@ -106,7 +107,7 @@ class RespeakerPiHatApa102Backend(LedUxBackend):
     def __init__(self, driver: Optional[_Driver] = None) -> None:
         if driver is not None:
             self._driver = driver
-        elif APA102 is not None:
+        else:
             try:
                 self._driver = _Apa102Driver()
             except Exception:
@@ -115,9 +116,10 @@ class RespeakerPiHatApa102Backend(LedUxBackend):
                     exc_info=True,
                 )
                 self._driver = _NoOpDriver()
-        else:
-            logger.warning("APA102 LED driver unavailable; using no-op backend")
-            self._driver = _NoOpDriver()
+        logger.debug(
+            "APA102 LED backend running with %s",
+            type(self._driver).__name__,
+        )
         self._lock = threading.Lock()
         self._condition = threading.Condition(self._lock)
         self._pending_pattern: Optional[_Pattern] = None

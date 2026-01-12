@@ -14,6 +14,8 @@ from voiceassistant.audio.recorder import Recorder
 from voiceassistant.config import AppConfig, load_config
 from voiceassistant.logging_config import configure_logging, get_logger
 from voiceassistant.state_machine import AssistantStateMachine
+from voiceassistant.ux.bootstrap import setup_ux_backends
+from voiceassistant.ux.manager import UXManager
 from voiceassistant.wakeword.service import WakewordEvent, WakewordService
 
 logger = get_logger(__name__)
@@ -80,6 +82,8 @@ def _build_components(config: AppConfig) -> AssistantRuntime:
         recorder=recorder,
         playback=playback,
     )
+    ux_manager: UXManager = machine._ux_manager
+    setup_ux_backends(ux_manager, playback)
     return AssistantRuntime(machine=machine, capture=capture, wakeword=wakeword)
 
 

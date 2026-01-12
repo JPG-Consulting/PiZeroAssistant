@@ -10,6 +10,7 @@ from typing import Optional
 class LLMRequest:
     messages: list[dict]
     system_prompt: str
+    max_tokens: Optional[int] = None
 
 
 def build_messages_with_system(messages: list[dict], system_prompt: str) -> list[dict]:

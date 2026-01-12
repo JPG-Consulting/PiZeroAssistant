@@ -130,7 +130,6 @@ class PlaybackController:
                         chunk_count,
                         total_bytes,
                     )
-                    stream.stop()
                 else:
                     logger.debug(
                         "Playback decoder completed after %d chunks (%d bytes)",
@@ -159,6 +158,16 @@ class PlaybackController:
                                 expected,
                                 elapsed,
                             )
+                try:
+                    if stopped:
+                        abort = getattr(stream, "abort", None)
+                        if callable(abort):
+                            abort()
+                        else:
+                            stream.stop()
+                    else:
+                        stream.stop()
+                finally:
                     stream.close()
         except FFMpegDecodeError as exc:
             logger.exception("Failed to decode audio for playback: %s", exc)

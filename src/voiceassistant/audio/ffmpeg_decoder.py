@@ -21,8 +21,14 @@ logger = get_logger(__name__)
 
 def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Iterator[bytes]:
     if audio.format == "pcm":
+        total_bytes = 0
+        frame_size = 2 * audio.channels
         for chunk in audio.iter_chunks():
+            total_bytes += len(chunk)
             yield chunk
+        remainder = total_bytes % frame_size
+        if remainder:
+            yield b"\x00" * (frame_size - remainder)
         return
 
     cmd = [
@@ -87,6 +93,7 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
     selector = selectors.DefaultSelector()
     stderr_tail = bytearray()
     total_stdout_bytes = 0
+    frame_size = 2 * audio.channels
     stdout_eof = False
     proc_exited = False
     try:
@@ -163,6 +170,9 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
                 if stderr:
                     message = f"{message}: {stderr}"
                 raise FFMpegDecodeError(message)
+            remainder = total_stdout_bytes % frame_size
+            if remainder:
+                yield b"\x00" * (frame_size - remainder)
     except GeneratorExit:
         stop_event.set()
         raise

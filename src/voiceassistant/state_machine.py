@@ -159,6 +159,7 @@ class AssistantStateMachine:
                 self._conversation_memory.add_assistant(reply)
                 self._conversation_memory.persist_if_enabled()
             tts_response = self._run_tts(reply)
+            self._log_tts_duration(tts_response)
         except ProviderError:
             logger.exception("Provider error in pipeline")
             self._state = AssistantState.IDLE
@@ -181,6 +182,20 @@ class AssistantStateMachine:
             )
         )
         self._monitor_playback()
+        elapsed = self._playback.get_last_elapsed_time()
+        reason = self._playback.get_last_stop_reason()
+        if elapsed is None:
+            logger.debug(
+                "Playback lifecycle: start → stop (reason=%s, elapsed=%.2fs)",
+                reason,
+                0.0,
+            )
+        else:
+            logger.debug(
+                "Playback lifecycle: start → stop (reason=%s, elapsed=%.2fs)",
+                reason,
+                elapsed,
+            )
         self._state = AssistantState.IDLE
         self._emit_ux(UxEvent.ASSISTANT_IDLE)
 
@@ -191,6 +206,12 @@ class AssistantStateMachine:
             lambda provider: provider.transcribe(wav_bytes)
         )
         logger.info("STT complete via %s", provider_name)
+        logger.debug(
+            'STT result via %s: "%s" (chars=%d)',
+            provider_name,
+            response.text,
+            len(response.text),
+        )
         return response.text, provider_name
 
     def _run_llm(self, messages: list[dict]) -> str:
@@ -203,6 +224,7 @@ class AssistantStateMachine:
 
     def _run_tts(self, text: str) -> TTSResponse:
         self._state = AssistantState.TTS
+        logger.debug('TTS input text (chars=%d): "%s"', len(text), text)
         response, provider_name = self._tts_router.call(lambda provider: provider.synthesize(text))
         logger.info("TTS complete via %s", provider_name)
         return response
@@ -216,6 +238,18 @@ class AssistantStateMachine:
             handle.writeframes(result.pcm)
         return buffer.getvalue()
 
+    def _log_tts_duration(self, response: TTSResponse) -> None:
+        if not response.wav_bytes:
+            return
+        try:
+            with wave.open(io.BytesIO(response.wav_bytes), "rb") as handle:
+                frames = handle.getnframes()
+                sample_rate_hz = handle.getframerate()
+        except wave.Error:
+            return
+        duration_s = frames / sample_rate_hz
+        logger.debug("TTS WAV duration: %.2f seconds", duration_s)
+
     def _monitor_playback(self) -> None:
         while self._playback.is_playing():
             try:
@@ -223,8 +257,10 @@ class AssistantStateMachine:
             except queue.Empty:
                 continue
             if event:
+                logger.debug("Playback barge-in detected")
                 logger.info("Barge-in detected; stopping playback")
                 self._playback.stop()
+                self._playback.set_stop_reason("barge_in")
                 return
 
     def _play_beep(self, path: str) -> None:

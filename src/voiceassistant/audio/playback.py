@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import threading
 import wave
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -28,24 +29,59 @@ class PlaybackController:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        self._start_time: Optional[float] = None
+        self._last_elapsed_time: Optional[float] = None
+        self._last_stop_reason = "unknown"
+        self._expected_duration: Optional[float] = None
 
     def play(self, request: PlaybackRequest) -> None:
         self.stop()
         self._stop_event.clear()
+        expected_duration = self._estimate_expected_duration(request)
+        with self._lock:
+            self._start_time = time.monotonic()
+            self._last_elapsed_time = None
+            self._last_stop_reason = "unknown"
+            self._expected_duration = expected_duration
+        if expected_duration is not None:
+            logger.debug("Playback started (expected=%.2fs)", expected_duration)
+        else:
+            logger.debug("Playback started")
         self._thread = threading.Thread(
             target=self._playback, args=(request,), name="Playback", daemon=True
         )
         self._thread.start()
 
     def stop(self) -> None:
+        should_log = self.is_playing()
+        elapsed = None
         with self._lock:
             self._stop_event.set()
+            if self._start_time is not None:
+                elapsed = time.monotonic() - self._start_time
+                self._last_elapsed_time = elapsed
+                self._last_stop_reason = "explicit_stop"
+                self._expected_duration = None
+        if should_log and elapsed is not None:
+            logger.debug("Playback stopped explicitly (elapsed=%.2fs)", elapsed)
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
         self._thread = None
 
     def is_playing(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
+
+    def get_last_stop_reason(self) -> str:
+        with self._lock:
+            return self._last_stop_reason
+
+    def get_last_elapsed_time(self) -> Optional[float]:
+        with self._lock:
+            return self._last_elapsed_time
+
+    def set_stop_reason(self, reason: str) -> None:
+        with self._lock:
+            self._last_stop_reason = reason
 
     def _playback(self, request: PlaybackRequest) -> None:  # pragma: no cover - realtime
         if request.audio is None and request.wav_bytes is None:
@@ -100,6 +136,28 @@ class PlaybackController:
                         chunk_count,
                         total_bytes,
                     )
+                    elapsed = None
+                    with self._lock:
+                        if self._start_time is not None:
+                            elapsed = time.monotonic() - self._start_time
+                            self._last_elapsed_time = elapsed
+                            if self._last_stop_reason == "unknown":
+                                self._last_stop_reason = "normal_end"
+                            expected = self._expected_duration
+                            self._expected_duration = None
+                            stop_reason = self._last_stop_reason
+                    if elapsed is not None:
+                        logger.debug("Playback finished normally (elapsed=%.2fs)", elapsed)
+                        if (
+                            expected is not None
+                            and stop_reason == "normal_end"
+                            and elapsed < expected * 0.85
+                        ):
+                            logger.warning(
+                                "Truncated playback detected: expected=%.2fs actual=%.2fs",
+                                expected,
+                                elapsed,
+                            )
                     # Explicit stop/close ordering helps drain buffered audio on EOF.
                     stream.stop()
                     stream.close()
@@ -133,3 +191,16 @@ class PlaybackController:
             sample_rate_hz=sample_rate,
             channels=channels,
         )
+
+    def _estimate_expected_duration(self, request: PlaybackRequest) -> Optional[float]:
+        if request.wav_bytes is None:
+            return None
+        try:
+            with wave.open(io.BytesIO(request.wav_bytes), "rb") as handle:
+                frames = handle.getnframes()
+                sample_rate_hz = handle.getframerate()
+        except wave.Error:
+            return None
+        if sample_rate_hz <= 0:
+            return None
+        return frames / sample_rate_hz

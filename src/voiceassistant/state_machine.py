@@ -12,7 +12,7 @@ from voiceassistant.audio.playback import PlaybackController, PlaybackRequest
 from voiceassistant.audio.recorder import Recorder, RecordingResult
 from voiceassistant.conversation.memory import ConversationMemory
 from voiceassistant.config import AppConfig
-from voiceassistant.llm.prompts import RESET_ACK_TEXT, SYSTEM_PROMPT
+from voiceassistant.llm.prompts import RESET_ACK_TEXT, get_system_prompt
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import LLMRequest, ProviderError
 from voiceassistant.providers.http import TTSResponse
@@ -145,17 +145,14 @@ class AssistantStateMachine:
                 reply = RESET_ACK_TEXT
             else:
                 self._conversation_memory.add_user(transcript)
-                messages = [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    *self._conversation_memory.build_messages(),
-                ]
+                messages = self._conversation_memory.build_messages()
                 total_chars = sum(len(message["content"]) for message in messages)
                 logger.debug(
                     "LLM request: %d messages, %d characters",
                     len(messages),
                     total_chars,
                 )
-                reply = self._run_llm(messages)
+                reply = self._run_llm(messages, get_system_prompt())
                 self._conversation_memory.add_assistant(reply)
                 self._conversation_memory.persist_if_enabled()
             tts_response = self._run_tts(reply)
@@ -214,10 +211,12 @@ class AssistantStateMachine:
         )
         return response.text, provider_name
 
-    def _run_llm(self, messages: list[dict]) -> str:
+    def _run_llm(self, messages: list[dict], system_prompt: str) -> str:
         self._state = AssistantState.LLM
         response, provider_name = self._llm_router.call(
-            lambda provider: provider.complete(LLMRequest(messages=messages))
+            lambda provider: provider.complete(
+                LLMRequest(messages=messages, system_prompt=system_prompt)
+            )
         )
         logger.info("LLM complete via %s", provider_name)
         return response.text

@@ -40,6 +40,7 @@ class ProviderConfig:
     max_failures: int
     cooldown_s: int
     audio_formats: Optional[List[str]]
+    max_tokens_per_request: Optional[int]
 
 
 @dataclass(frozen=True)
@@ -145,6 +146,19 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
                     f"{base_path}.audio_formats is only valid for stt providers"
                 )
             audio_formats = None
+        max_tokens_value = item.get("max_tokens_per_request")
+        if service != "llm" and max_tokens_value is not None:
+            raise ConfigError(
+                f"{base_path}.max_tokens_per_request is only valid for llm providers"
+            )
+        if max_tokens_value is None:
+            max_tokens_per_request = None
+        else:
+            max_tokens_per_request = int(max_tokens_value)
+            if max_tokens_per_request <= 0:
+                raise ConfigError(
+                    f"{base_path}.max_tokens_per_request must be a positive integer"
+                )
         endpoint_value = item.get("endpoint")
         if service == "llm" and provider_type == "local_echo":
             if endpoint_value is not None and str(endpoint_value).strip() != "":
@@ -168,6 +182,7 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
                 max_failures=int(item.get("max_failures", 2)),
                 cooldown_s=int(item.get("cooldown_s", 60)),
                 audio_formats=audio_formats,
+                max_tokens_per_request=max_tokens_per_request,
             )
         )
     return providers

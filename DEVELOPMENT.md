@@ -84,6 +84,26 @@ All providers are synchronous and must raise `ProviderError` on failure. “Stat
 
 **Conversational memory placement:** Conversational memory is owned by the state machine and supplied explicitly with each LLM request. Providers remain unaware of dialogue continuity and must never implement provider-side chat history. Persistence, when enabled, is local-only and opt-in.
 
+### LLM token limits (Phase 1)
+
+- The application MAY configure a per-request maximum token limit for LLM providers.
+- Token limits are a routing/request policy, not a provider responsibility.
+- Providers remain stateless and must not track usage.
+- If a provider supports a native `max_tokens` (or equivalent) parameter, it is used.
+- If a provider does not support native limits, Phase 1 does not enforce bounds on responses.
+- Absence of a configured limit means unbounded behavior (current default).
+- Rolling budgets, time windows, and usage accounting are explicitly out of scope for Phase 1.
+
+#### Future design: Phase 2 token budgeting (not implemented)
+
+- Phase 2 introduces per-provider token budgets (hour/day).
+- Enforcement remains application-owned (router-level), not provider-owned.
+- Providers remain stateless and unaware of budgets.
+- Token accounting may use provider-reported usage when available, with deterministic estimation as a fallback.
+- Providers exceeding budget enter a cooldown state, similar to failure-based cooldowns.
+- Optional user-facing UX feedback (spoken warnings) may be added later.
+- Phase 2 is intentionally deferred to avoid complexity in Phase 1.
+
 ### System prompt ownership
 
 - The system prompt is application-owned and always passed explicitly with every LLM call.

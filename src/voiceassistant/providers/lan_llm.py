@@ -32,6 +32,8 @@ class LanHttpLLMProvider(HttpProvider):
 
     def complete(self, req: LLMRequest) -> LLMResponse:
         payload = {"messages": build_messages_with_system(req.messages, req.system_prompt), "stream": True}
+        if req.max_tokens is not None:
+            payload["max_tokens"] = req.max_tokens
         try:
             resp = requests.post(
                 f"{self.endpoint.rstrip('/')}/chat/completions",

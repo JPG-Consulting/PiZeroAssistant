@@ -222,6 +222,11 @@ class AssistantStateMachine:
 
     def _run_llm(self, messages: list[dict], system_prompt: str) -> str:
         self._state = AssistantState.LLM
+        logger.debug(
+            "Using system prompt (present=%s, chars=%d)",
+            bool(system_prompt),
+            len(system_prompt),
+        )
 
         def _invoke(provider: LLMProvider) -> LLMResponse:
             max_tokens, supports_native = self._llm_limits.get(

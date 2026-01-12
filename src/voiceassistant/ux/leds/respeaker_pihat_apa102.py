@@ -116,10 +116,10 @@ class RespeakerPiHatApa102Backend(LedUxBackend):
                     exc_info=True,
                 )
                 self._driver = _NoOpDriver()
-        logger.debug(
-            "APA102 LED backend running with %s",
-            type(self._driver).__name__,
-        )
+        if isinstance(self._driver, _NoOpDriver):
+            logger.debug("APA102 LED backend disabled (no-op)")
+        else:
+            logger.debug("APA102 LED backend enabled")
         self._lock = threading.Lock()
         self._condition = threading.Condition(self._lock)
         self._pending_pattern: Optional[_Pattern] = None

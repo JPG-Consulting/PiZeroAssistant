@@ -14,9 +14,9 @@ from voiceassistant.ux.leds.base import LedUxBackend
 
 logger = get_logger(__name__)
 
-_APA102_SPEC = importlib.util.find_spec("apa102_pi.driver")
+_APA102_SPEC = importlib.util.find_spec("apa102_pi.driver.apa102")
 if _APA102_SPEC is not None:
-    from apa102_pi.driver import APA102
+    from apa102_pi.driver.apa102 import APA102
 else:
     APA102 = None
 

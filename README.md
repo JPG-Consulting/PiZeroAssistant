@@ -40,6 +40,15 @@ voiceassistant --config config/config.yaml
 
 The console script is only available after installation and is optional during development.
 
+### Type checking
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+python -m mypy
+```
+
 ### Python version requirement
 
 Python 3.11 is required due to `openwakeword==0.5.1`. Raspberry Pi OS Bookworm includes Python 3.11, while Raspberry Pi OS Trixie ships with Python 3.13 and needs a separate Python 3.11 install. See `docs/INSTALLATION.md` for setup steps and `docs/dev/python-versions.md` for platform details.

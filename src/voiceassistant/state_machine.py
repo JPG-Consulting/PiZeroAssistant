@@ -7,6 +7,7 @@ import io
 import queue
 import time
 import wave
+from typing import TYPE_CHECKING
 
 from voiceassistant.audio.playback import PlaybackController, PlaybackRequest
 from voiceassistant.audio.recorder import Recorder, RecordingResult
@@ -15,7 +16,6 @@ from voiceassistant.config import AppConfig
 from voiceassistant.llm.prompts import RESET_ACK_TEXT, get_system_prompt
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import LLMRequest, ProviderError
-from voiceassistant.providers.http import LLMResponse, TTSResponse
 from voiceassistant.providers.llm import LLMProvider
 from voiceassistant.providers.factory import (
     build_llm_provider,
@@ -28,6 +28,9 @@ from voiceassistant.ux.manager import UXManager
 from voiceassistant.wakeword.service import WakewordEvent
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from voiceassistant.providers.http import LLMResponse, TTSResponse
 
 
 class AssistantState(enum.Enum):

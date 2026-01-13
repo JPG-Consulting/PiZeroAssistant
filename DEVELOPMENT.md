@@ -120,6 +120,14 @@ The project intentionally uses a `src/` layout, and `pyproject.toml` is the auth
   - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.
   - Playback owns decoding, buffering, and streaming control; providers must not decode audio or buffer entire output before playback begins.
 
+### Static typing as an architectural guardrail
+
+- mypy is used to enforce architectural boundaries, not style.
+- Factories must type-check as returning STTProvider/LLMProvider/TTSProvider interfaces, never concrete provider classes.
+- Interface types (STTProvider/LLMProvider/TTSProvider) remain typing-only and must not contain shared behavior.
+- The typing suite under `tests/typing/` is part of invariant enforcement; mypy failures are architectural regressions.
+- Concrete provider classes must never be imported from `voiceassistant.providers` in runtime code; violations should be caught by code review and typing tests.
+
 ### OpenAI Providers
 
 - OpenAI LLM and TTS providers are treated as third-party APIs.

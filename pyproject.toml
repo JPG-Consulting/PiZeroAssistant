@@ -8,6 +8,8 @@ disallow_any_generics = true
 no_implicit_optional = true
 check_untyped_defs = true
 files = ["src", "tests/typing"]
+show_error_codes = true
+pretty = true
 
 # Allow gradual typing at module boundaries where needed
 implicit_reexport = false

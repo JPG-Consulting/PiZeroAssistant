@@ -62,6 +62,12 @@ PYTHONPATH=src python -m voiceassistant.main --config config/config.yaml
 
 Advanced users can optionally install the project in editable mode to avoid setting `PYTHONPATH`, but it is not required to get started.
 
+## Supported execution modes
+
+- Development without installation: requires `PYTHONPATH=src`.
+- Development with an editable install in a virtual environment: no `PYTHONPATH` required; the `voiceassistant` console script is available.
+- Service / production execution: use the virtual environment interpreter or console script; `PYTHONPATH` must not be relied upon in system services.
+
 ## Optional conversation memory persistence
 
 Conversation memory is in-memory by default. To enable local persistence, set:

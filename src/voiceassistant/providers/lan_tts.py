@@ -44,7 +44,7 @@ class LanHttpTTSProvider(HttpProvider):
         payload = {"input": text, "format": "pcm"}
         try:
             resp = requests.post(
-                f"{self.endpoint.rstrip('/')}/audio/speech",
+                self.endpoint,
                 headers=self._headers(),
                 json=payload,
                 timeout=self.timeout_s,

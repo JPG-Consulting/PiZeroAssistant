@@ -32,7 +32,7 @@ class LanHttpSTTProvider(HttpProvider):
         files = {"file": ("audio.wav", bytes(wav_bytes), "audio/wav")}
         try:
             resp = requests.post(
-                f"{self.endpoint.rstrip('/')}/audio/transcriptions",
+                self.endpoint,
                 headers=self._headers(),
                 files=files,
                 timeout=self.timeout_s,

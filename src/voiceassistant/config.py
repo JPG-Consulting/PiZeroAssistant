@@ -41,6 +41,7 @@ class ProviderConfig:
     cooldown_s: int
     audio_formats: Optional[List[str]]
     max_tokens_per_request: Optional[int]
+    model: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,7 @@ class ConfigError(ValueError):
 
 SUPPORTED_PROVIDER_TYPES = {
     "stt": {"http", "lan_http"},
-    "llm": {"http", "lan_http", "local_echo"},
+    "llm": {"http", "lan_http", "local_echo", "openai"},
     "tts": {"http", "lan_http"},
 }
 
@@ -159,6 +160,19 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
                 raise ConfigError(
                     f"{base_path}.max_tokens_per_request must be a positive integer"
                 )
+        model_value = item.get("model")
+        if service == "llm":
+            model = str(model_value) if model_value is not None else None
+            if provider_type == "openai":
+                if not model or not model.strip():
+                    raise ConfigError(f"{base_path}.model is required for openai providers")
+                api_key_env = item.get("api_key_env")
+                if not api_key_env or not str(api_key_env).strip():
+                    raise ConfigError(f"{base_path}.api_key_env is required for openai providers")
+        else:
+            if model_value is not None:
+                raise ConfigError(f"{base_path}.model is only valid for llm providers")
+            model = None
         endpoint_value = item.get("endpoint")
         if service == "llm" and provider_type == "local_echo":
             if endpoint_value is not None and str(endpoint_value).strip() != "":
@@ -183,6 +197,7 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
                 cooldown_s=int(item.get("cooldown_s", 60)),
                 audio_formats=audio_formats,
                 max_tokens_per_request=max_tokens_per_request,
+                model=model,
             )
         )
     return providers

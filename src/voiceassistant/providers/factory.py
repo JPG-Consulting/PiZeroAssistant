@@ -9,6 +9,7 @@ from voiceassistant.providers.lan_llm import LanHttpLLMProvider
 from voiceassistant.providers.lan_stt import LanHttpSTTProvider
 from voiceassistant.providers.lan_tts import LanHttpTTSProvider
 from voiceassistant.providers.llm import LLMProvider
+from voiceassistant.providers.openai_llm import OpenAILLMProvider
 from voiceassistant.providers.stt import STTProvider
 
 
@@ -49,6 +50,14 @@ def build_llm_provider(config: ProviderConfig) -> LLMProvider:
             endpoint=config.endpoint,
             timeout_s=config.timeout_s,
             api_key=resolve_api_key(config),
+        )
+    if config.provider_type == "openai":
+        return OpenAILLMProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+            model=config.model or "",
         )
     # Should be unreachable because config.py validates provider_type; defensive only.
     raise ConfigError(

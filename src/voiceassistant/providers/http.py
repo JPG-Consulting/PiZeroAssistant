@@ -77,9 +77,10 @@ class HttpSTTProvider(HttpProvider):
 class HttpLLMProvider(HttpProvider):
     def complete(self, req: LLMRequest) -> LLMResponse:
         payload = {"messages": build_messages_with_system(req.messages, req.system_prompt)}
+        endpoint = self.endpoint
         try:
             resp = requests.post(
-                self.endpoint,
+                endpoint,
                 headers=self._headers(),
                 json=payload,
                 timeout=self.timeout_s,

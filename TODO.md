@@ -27,6 +27,15 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Document required interfaces for STT / LLM / TTS providers
   - Include minimal examples
 
+- [ ] **Unify provider endpoint semantics (full operation endpoints)**
+
+  - Align all providers with the invariant that configuration specifies full, operation-specific HTTP endpoints.
+  - Remove provider-owned path composition (providers must not append or modify endpoint paths).
+  - Treat LAN-hosted and internet-hosted services uniformly as third-party APIs.
+  - Update provider implementations and example configs accordingly.
+  - This is a mechanical refactor only; no behavior change intended.
+  - Must preserve all existing architectural invariants in DEVELOPMENT.md.
+
 - [x] **Local echo LLM provider (diagnostic only)**
 
   - Returns the user message verbatim (or lightly formatted)

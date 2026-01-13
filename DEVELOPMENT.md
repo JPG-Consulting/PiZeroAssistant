@@ -11,11 +11,36 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 - Main state machine reacts to wake events and advances through `IDLE → WAKE → RECORD → STT → LLM → TTS → IDLE`.
 - Playback controller handles interruptible audio output.
 
+### UX Event Contract (Authoritative)
+
+- UX is event-driven and must not infer behavior from internal state.
+- The `AssistantStateMachine` is the sole emitter of UX events.
+- Events are semantic and may repeat.
+- Current authoritative events include: `ASSISTANT_IDLE`, `ASSISTANT_READY`, `WAKE_DETECTED`, `LISTENING`, `PROCESSING`, `SPEAKING`, `NO_SPEECH`, `ERROR`.
+- UX backends must render events only and must not implement logic or state transitions.
+- Providers must never emit UX events.
+
 ## Audio pipeline
 
 - **Capture**: `AudioCaptureThread` reads `int16` PCM frames at a fixed duration (default 20 ms). The capture callback never blocks; it drops frames when queues are full.
 - **Frame sizes**: Frames are fixed-size; invalid frames are dropped before inference.
 - **Decoupling**: Capture distributes frames to bounded queues for wakeword detection and recording. Inference never runs in the callback.
+
+### Playback Stop Semantics
+
+- Playback is interruptible via barge-in at all times.
+- Barge-in is detected via wakeword events during playback.
+- `PlaybackController` records stop reasons including: `normal_end`, `barge_in`, `explicit_stop`, `unknown`.
+- Stop latency is bounded by decoder select timeout (~100 ms).
+- Truncation detection is heuristic, based on expected vs actual duration, and logged as a warning.
+
+### Wake Beep Behavior
+
+- Wake beep playback is optional and configuration-driven.
+- Failure to play the wake beep must never fail the pipeline.
+- Wake beep playback is interruptible like TTS.
+- Wake beep playback must not block recording or state transitions.
+- Loudness must be baked into the audio asset; no runtime volume scaling is permitted.
 
 ## Wakeword service
 
@@ -65,6 +90,17 @@ The provider system is an abstraction boundary. Each service type (STT, LLM, TTS
 
 Provider-specific logic means anything beyond invoking the interface methods (for example, API payload formatting, endpoint routing, or response parsing). That logic should live inside provider implementations, not in the state machine, router, or audio pipeline.
 
+### Endpoint Ownership and Third-Party API Assumption
+
+- All external services (including services running on the local network) are treated as third-party APIs.
+- Providers must not assume control over, or stability of, upstream API semantics.
+- Configuration must specify the full HTTP endpoint for the specific operation performed by the provider.
+- The `endpoint` field represents a complete, operation-specific URL.
+- Providers must not compose, append, infer, or modify endpoint paths.
+- Providers may adapt request and response wire formats, but must not alter endpoint structure.
+- Any upstream API change must surface as an explicit failure rather than silent adaptation.
+- Uniform treatment of LAN-hosted and internet-hosted services is intentional and required.
+
 ### Provider roles
 
 - **STT providers** accept WAV audio and return transcribed text.
@@ -83,6 +119,14 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
 All providers are synchronous and must raise `ProviderError` on failure. “Stateless” means providers must not retain cross-request conversational, audio, or session state (no carried-over context, buffers, or history). Providers may still read configuration, keep internal helpers, and use per-call transient state.
 
 **Conversational memory placement:** Conversational memory is owned by the state machine and supplied explicitly with each LLM request. Providers remain unaware of dialogue continuity and must never implement provider-side chat history. Persistence, when enabled, is local-only and opt-in.
+
+### Conversation Memory Lifecycle
+
+- Conversation memory is owned exclusively by the state machine.
+- Memory reset commands are evaluated after STT and before LLM.
+- Empty STT transcripts do not mutate memory.
+- Assistant replies are added to memory only after successful LLM completion.
+- Persistence, when enabled, occurs only after a successful assistant reply.
 
 ### LLM token limits (Phase 1)
 
@@ -218,6 +262,13 @@ Invariants for all providers:
 - On any error after a wake event, the state machine resets to `IDLE`.
 - Playback is stopped immediately when barge-in is detected.
 
+### Error Handling and Recovery Paths
+
+- Any provider failure aborts the current pipeline run.
+- On failure, the assistant always returns to `IDLE`.
+- Wakeword detection and audio capture are never stopped by pipeline failures.
+- Partial pipeline progress must not mutate conversation memory unless explicitly completed.
+
 ## Behavioral invariants
 
 - Audio capture never blocks on inference.
@@ -235,6 +286,14 @@ Invariants for all providers:
 - Audio is processed locally until a wakeword event triggers recording.
 - Network calls occur only after a wakeword-triggered recording is complete.
 - No telemetry is emitted.
+
+### Recording Artifact Guarantees
+
+- The last user command recording is written to a fixed path (default `/tmp/last_command.wav`).
+- The file may contain silence or partial speech.
+- The file is overwritten on each command.
+- The artifact is local-only and considered sensitive data.
+- Presence of this file does not imply successful STT or LLM execution.
 
 ## Power-management & real-time constraints
 

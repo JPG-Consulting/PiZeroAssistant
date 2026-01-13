@@ -105,6 +105,7 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
 
 - **STT providers** accept WAV audio and return transcribed text.
   STT providers may return an empty transcript (`""`) to indicate silence or no detected speech; this is not an error. Missing or malformed `text` fields are treated as provider failures.
+  All STT providers must implement the STTProvider interface and expose exactly one operation: transcribe(wav_bytes) → STTResponse; the interface exists for typing and invariants only and must not contain shared behavior.
 - **LLM providers** accept an explicit message list (`LLMRequest.messages`) plus an explicit system prompt (`LLMRequest.system_prompt`) and return response text.
   **LLM providers must not retain conversational history or dialogue state.** Each call must be treated as an independent completion; providers must not store prompts, responses, or message history across requests.
   - LLM providers may stream internally for latency improvements, but they still return a single `LLMResponse` text payload to the state machine.

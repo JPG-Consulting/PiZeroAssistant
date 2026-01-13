@@ -9,11 +9,12 @@ import requests
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import ProviderError
 from voiceassistant.providers.http import HttpProvider, STTResponse
+from voiceassistant.providers.stt import STTProvider
 
 logger = get_logger(__name__)
 
 
-class LanHttpSTTProvider(HttpProvider):
+class LanHttpSTTProvider(HttpProvider, STTProvider):
     def __init__(
         self,
         name: str,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -245,6 +246,30 @@ def load_config(path: str) -> AppConfig:
     persistence_path = persistence.get("path")
     if persistence_enabled and not persistence_path:
         raise ConfigError("conversation.persistence.path is required when persistence is enabled")
+    wakeword_model_path = _require(wakeword.get("model_path"), "wakeword.model_path")
+    wake_beep_path = raw.get("wake_beep_path")
+    record_output_path = raw.get("record_output_path", "/tmp/last_command.wav")
+
+    if not Path(str(wakeword_model_path)).is_absolute():
+        raise ConfigError(
+            "wakeword.model_path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
+    if wake_beep_path is not None and not Path(wake_beep_path).is_absolute():
+        raise ConfigError(
+            "wake_beep_path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
+    if not Path(str(record_output_path)).is_absolute():
+        raise ConfigError(
+            "record_output_path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
+    if persistence_enabled and not Path(str(persistence_path)).is_absolute():
+        raise ConfigError(
+            "conversation.persistence.path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
 
     raw_reset_commands = conversation.get(
         "reset_commands",
@@ -264,7 +289,7 @@ def load_config(path: str) -> AppConfig:
             vad_mode=int(audio.get("vad_mode", 2)),
         ),
         wakeword=WakewordConfig(
-            model_path=str(_require(wakeword.get("model_path"), "wakeword.model_path")),
+            model_path=str(wakeword_model_path),
             inference_window_ms=int(wakeword.get("inference_window_ms", 80)),
             score_threshold=float(wakeword.get("score_threshold", 0.6)),
             wakeword_cooldown_ms=int(wakeword.get("wakeword_cooldown_ms", 1500)),
@@ -290,8 +315,8 @@ def load_config(path: str) -> AppConfig:
                 path=str(persistence_path) if persistence_path is not None else None,
             ),
         ),
-        wake_beep_path=raw.get("wake_beep_path"),
-        record_output_path=str(raw.get("record_output_path", "/tmp/last_command.wav")),
+        wake_beep_path=wake_beep_path,
+        record_output_path=str(record_output_path),
     )
 
     if config.audio.frame_duration_ms not in (10, 20, 30):

@@ -17,6 +17,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Type checking
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+python -m mypy
+```
+
 ## Installing a pretrained openWakeWord model
 
 The assistant will not start without a wake-word model. This project does not include a model by default. You must download a pretrained openWakeWord model manually and place it on disk.

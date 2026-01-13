@@ -29,8 +29,16 @@ cp config/config.example.yaml config/config.yaml
 3. Run the assistant:
 
 ```bash
-python -m voiceassistant.main --config config/config.yaml
+PYTHONPATH=src python -m voiceassistant.main --config config/config.yaml
 ```
+
+Optional: if you install the project in a virtual environment (for example, `pip install -e .`), a console script named `voiceassistant` becomes available and can be used instead:
+
+```bash
+voiceassistant --config config/config.yaml
+```
+
+The console script is only available after installation and is optional during development.
 
 ### Python version requirement
 

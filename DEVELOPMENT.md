@@ -90,6 +90,10 @@ The provider system is an abstraction boundary. Each service type (STT, LLM, TTS
 
 Provider-specific logic means anything beyond invoking the interface methods (for example, API payload formatting, endpoint routing, or response parsing). That logic should live inside provider implementations, not in the state machine, router, or audio pipeline.
 
+### Tooling and execution layout (architectural notes)
+
+The project intentionally uses a `src/` layout, and `pyproject.toml` is the authoritative place for tooling configuration (typing, linters, entry points). The presence of `pyproject.toml` and console scripts does not imply packaging or distribution is a current goal. Import stability and explicit execution models are architectural concerns.
+
 ### Endpoint Ownership and Third-Party API Assumption
 
 - All external services (including services running on the local network) are treated as third-party APIs.

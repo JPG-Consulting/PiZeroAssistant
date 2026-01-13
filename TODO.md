@@ -190,6 +190,11 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Early validation for incompatible options
   - Clear, actionable error messages
 
+## Developer tooling / infrastructure
+
+- [ ] Add a minimal `[build-system]` to `pyproject.toml` later to enable clean, future-proof packaging and non-editable installs (services/images/distribution); not required yet and must not block development, as editable installs (`-e`) are sufficient for now.
+- [ ] Document and lock supported execution modes (dev with `PYTHONPATH`, editable install in a venv, service execution via venv).
+
 ## UX / Hardware (optional, non-blocking)
 
 - [ ] Optional: richer LED patterns or audio-reactive effects (post-v1)

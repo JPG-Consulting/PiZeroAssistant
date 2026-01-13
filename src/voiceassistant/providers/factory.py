@@ -16,6 +16,7 @@ from voiceassistant.providers.tts import TTSProvider
 
 
 def build_stt_provider(config: ProviderConfig) -> STTProvider:
+    """Return an STTProvider contract with transcribe(wav_bytes) -> STTResponse only."""
     if config.provider_type == "http":
         return HttpSTTProvider(
             name=config.name,

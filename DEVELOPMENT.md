@@ -114,6 +114,17 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
   - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.
   - Playback owns decoding, buffering, and streaming control; providers must not decode audio or buffer entire output before playback begins.
 
+### OpenAI Providers
+
+- OpenAI LLM and TTS providers are treated as third-party APIs.
+- Configuration must specify full, operation-specific endpoints for OpenAI providers.
+- Providers must not construct or modify endpoint paths.
+- OpenAI LLM providers use the Chat Completions API and are fully stateless.
+- OpenAI TTS providers use the Audio → Speech API and may stream audio.
+- OpenAI TTS providers may return different encoded formats based on Content-Type.
+- Audio decoding, buffering, and playback control remain owned by the runtime.
+- API keys are supplied via environment variables only.
+
 `provider_type: local_echo` is a diagnostic-only LLM provider that returns the latest user message verbatim. It has no intelligence, memory, context, or external dependency, and exists solely to validate the STT → LLM → TTS pipeline. It is not a conversational model.
 
 All providers are synchronous and must raise `ProviderError` on failure. “Stateless” means providers must not retain cross-request conversational, audio, or session state (no carried-over context, buffers, or history). Providers may still read configuration, keep internal helpers, and use per-call transient state.

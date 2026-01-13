@@ -90,6 +90,17 @@ The provider system is an abstraction boundary. Each service type (STT, LLM, TTS
 
 Provider-specific logic means anything beyond invoking the interface methods (for example, API payload formatting, endpoint routing, or response parsing). That logic should live inside provider implementations, not in the state machine, router, or audio pipeline.
 
+### Endpoint Ownership and Third-Party API Assumption
+
+- All external services (including services running on the local network) are treated as third-party APIs.
+- Providers must not assume control over, or stability of, upstream API semantics.
+- Configuration must specify the full HTTP endpoint for the specific operation performed by the provider.
+- The `endpoint` field represents a complete, operation-specific URL.
+- Providers must not compose, append, infer, or modify endpoint paths.
+- Providers may adapt request and response wire formats, but must not alter endpoint structure.
+- Any upstream API change must surface as an explicit failure rather than silent adaptation.
+- Uniform treatment of LAN-hosted and internet-hosted services is intentional and required.
+
 ### Provider roles
 
 - **STT providers** accept WAV audio and return transcribed text.

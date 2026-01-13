@@ -25,7 +25,7 @@ routing:
       audio_formats: ["wav"]
     # - name: "lan-stt"
     #   provider_type: "lan_http"
-    #   endpoint: "http://<lan-ip>/v1"
+    #   endpoint: "http://<lan-ip>/v1/audio/transcriptions"
     #   timeout_s: 15
     #   api_key_env: null
     #   max_failures: 2
@@ -56,7 +56,7 @@ routing:
       cooldown_s: 60
     # - name: "lan-tts"
     #   provider_type: "lan_http"
-    #   endpoint: "http://<lan-ip>/v1"
+    #   endpoint: "http://<lan-ip>/v1/audio/speech"
     #   timeout_s: 20
     #   api_key_env: null
     #   max_failures: 2

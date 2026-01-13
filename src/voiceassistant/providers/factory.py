@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from voiceassistant.config import ConfigError, ProviderConfig, resolve_api_key
-from voiceassistant.providers.base import Provider
 from voiceassistant.providers.echo_llm import LocalEchoLLMProvider
 from voiceassistant.providers.http import HttpLLMProvider, HttpSTTProvider, HttpTTSProvider
 from voiceassistant.providers.lan_llm import LanHttpLLMProvider
@@ -13,6 +12,7 @@ from voiceassistant.providers.llm import LLMProvider
 from voiceassistant.providers.openai_llm import OpenAILLMProvider
 from voiceassistant.providers.openai_tts import OpenAITTSProvider
 from voiceassistant.providers.stt import STTProvider
+from voiceassistant.providers.tts import TTSProvider
 
 
 def build_stt_provider(config: ProviderConfig) -> STTProvider:
@@ -67,7 +67,8 @@ def build_llm_provider(config: ProviderConfig) -> LLMProvider:
     )
 
 
-def build_tts_provider(config: ProviderConfig) -> Provider:
+def build_tts_provider(config: ProviderConfig) -> TTSProvider:
+    """Return a TTSProvider contract with synthesize(text) -> TTSResponse only."""
     if config.provider_type == "http":
         return HttpTTSProvider(
             name=config.name,

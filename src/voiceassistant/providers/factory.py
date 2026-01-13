@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from voiceassistant.config import ConfigError, ProviderConfig, resolve_api_key
+from voiceassistant.providers.base import Provider
 from voiceassistant.providers.echo_llm import LocalEchoLLMProvider
 from voiceassistant.providers.http import HttpLLMProvider, HttpSTTProvider, HttpTTSProvider
 from voiceassistant.providers.lan_llm import LanHttpLLMProvider
@@ -10,6 +11,7 @@ from voiceassistant.providers.lan_stt import LanHttpSTTProvider
 from voiceassistant.providers.lan_tts import LanHttpTTSProvider
 from voiceassistant.providers.llm import LLMProvider
 from voiceassistant.providers.openai_llm import OpenAILLMProvider
+from voiceassistant.providers.openai_tts import OpenAITTSProvider
 from voiceassistant.providers.stt import STTProvider
 
 
@@ -65,7 +67,7 @@ def build_llm_provider(config: ProviderConfig) -> LLMProvider:
     )
 
 
-def build_tts_provider(config: ProviderConfig) -> HttpTTSProvider:
+def build_tts_provider(config: ProviderConfig) -> Provider:
     if config.provider_type == "http":
         return HttpTTSProvider(
             name=config.name,
@@ -79,6 +81,15 @@ def build_tts_provider(config: ProviderConfig) -> HttpTTSProvider:
             endpoint=config.endpoint,
             timeout_s=config.timeout_s,
             api_key=resolve_api_key(config),
+        )
+    if config.provider_type == "openai":
+        return OpenAITTSProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+            model=config.model or "",
+            voice=config.voice,
         )
     # Should be unreachable because config.py validates provider_type; defensive only.
     raise ConfigError(

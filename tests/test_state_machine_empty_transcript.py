@@ -53,6 +53,9 @@ def build_test_config() -> AppConfig:
         max_failures=2,
         cooldown_s=60,
         audio_formats=["wav"],
+        max_tokens_per_request=None,
+        model=None,
+        voice=None,
     )
     llm_provider = ProviderConfig(
         name="llm",
@@ -63,6 +66,9 @@ def build_test_config() -> AppConfig:
         max_failures=2,
         cooldown_s=60,
         audio_formats=None,
+        max_tokens_per_request=None,
+        model=None,
+        voice=None,
     )
     tts_provider = ProviderConfig(
         name="tts",
@@ -73,6 +79,9 @@ def build_test_config() -> AppConfig:
         max_failures=2,
         cooldown_s=60,
         audio_formats=None,
+        max_tokens_per_request=None,
+        model=None,
+        voice=None,
     )
     return AppConfig(
         audio=AudioConfig(

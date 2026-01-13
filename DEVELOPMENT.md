@@ -183,6 +183,7 @@ All providers are synchronous and must raise `ProviderError` on failure. “Stat
 ### Configuration-driven selection
 
 Providers are selected via `config.yaml`. Multiple providers can be listed per service and are tried in order for fallback. Provider names are logical identifiers only (no name-prefix selection). The provider implementation is selected explicitly by `provider_type`, and unsupported types fail fast at startup during config load.
+All configuration filesystem paths that reference runtime assets (models, audio files, persistence paths) must be absolute to keep runtime execution independent of the current working directory.
 
 Example:
 

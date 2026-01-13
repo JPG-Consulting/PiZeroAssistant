@@ -195,6 +195,13 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 - [ ] Add a minimal `[build-system]` to `pyproject.toml` later to enable clean, future-proof packaging and non-editable installs (services/images/distribution); not required yet and must not block development, as editable installs (`-e`) are sufficient for now.
 - [ ] Document and lock supported execution modes (dev with `PYTHONPATH`, editable install in a venv, service execution via venv).
 
+### Architecture hardening (typing / boundaries)
+
+- [ ] Provider capability typing (e.g. streaming vs non-streaming, audio formats as type-level metadata)
+- [ ] Tighten ProviderRouter typing using generics per provider kind (STT / LLM / TTS)
+- [ ] Add fail-fast config typing for provider-specific required fields
+- [ ] Enforce service-mode execution invariants (no reliance on current working directory, venv-only execution)
+
 ## UX / Hardware (optional, non-blocking)
 
 - [ ] Optional: richer LED patterns or audio-reactive effects (post-v1)

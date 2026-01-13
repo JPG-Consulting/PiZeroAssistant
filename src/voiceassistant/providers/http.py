@@ -11,6 +11,7 @@ import requests
 from voiceassistant.audio.stream import AudioStream, BytesAudioStream
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import LLMRequest, Provider, ProviderError, build_messages_with_system
+from voiceassistant.providers.tts import TTSProvider
 
 logger = get_logger(__name__)
 
@@ -96,7 +97,7 @@ class HttpLLMProvider(HttpProvider):
         return LLMResponse(text=text)
 
 
-class HttpTTSProvider(HttpProvider):
+class HttpTTSProvider(HttpProvider, TTSProvider):
     def synthesize(self, text: str) -> TTSResponse:
         payload = {"text": text}
         try:

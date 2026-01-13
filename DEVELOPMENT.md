@@ -110,6 +110,7 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
   - LLM providers may stream internally for latency improvements, but they still return a single `LLMResponse` text payload to the state machine.
   - Incremental speech and sentence boundary decisions belong to the state machine, not the provider.
 - **TTS providers** accept text and return encoded audio. They may return either full WAV bytes or a streaming `AudioStream`.
+  - All TTS providers must implement the TTSProvider interface and expose exactly one operation: synthesize(text) → TTSResponse; the interface exists for typing and invariants only and must not contain shared behavior.
   - LAN TTS uses `POST /v1/audio/speech` and requests `format: pcm` so the runtime receives raw audio bytes.
   - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.
   - Playback owns decoding, buffering, and streaming control; providers must not decode audio or buffer entire output before playback begins.

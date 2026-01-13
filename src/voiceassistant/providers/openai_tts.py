@@ -9,9 +9,10 @@ import requests
 from voiceassistant.audio.stream import AudioStream
 from voiceassistant.providers.base import Provider, ProviderError
 from voiceassistant.providers.http import TTSResponse
+from voiceassistant.providers.tts import TTSProvider
 
 
-class OpenAITTSProvider(Provider):
+class OpenAITTSProvider(Provider, TTSProvider):
     """OpenAI TTS provider using the Audio → Speech API."""
 
     _DEFAULT_SAMPLE_RATE_HZ = 24000

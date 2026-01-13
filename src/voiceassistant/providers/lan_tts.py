@@ -12,12 +12,13 @@ from voiceassistant.audio.stream import AudioStream
 from voiceassistant.logging_config import get_logger
 from voiceassistant.providers.base import ProviderError
 from voiceassistant.providers.http import HttpProvider, TTSResponse
+from voiceassistant.providers.tts import TTSProvider
 
 
 logger = get_logger(__name__)
 
 
-class LanHttpTTSProvider(HttpProvider):
+class LanHttpTTSProvider(HttpProvider, TTSProvider):
     """LAN OpenAI-compatible TTS provider.
 
     Streaming is transport-level only; playback handles decoding and buffering.

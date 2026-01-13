@@ -36,7 +36,7 @@ class LanHttpLLMProvider(HttpProvider):
             payload["max_tokens"] = req.max_tokens
         try:
             resp = requests.post(
-                f"{self.endpoint.rstrip('/')}/chat/completions",
+                self.endpoint,
                 headers=self._headers(),
                 json=payload,
                 timeout=(self.timeout_s, None),  # disable read timeout for streaming LLMs

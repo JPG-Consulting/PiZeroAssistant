@@ -133,6 +133,9 @@ The project intentionally uses a `src/` layout, and `pyproject.toml` is the auth
 - OpenAI LLM and TTS providers are treated as third-party APIs.
 - Configuration must specify full, operation-specific endpoints for OpenAI providers.
 - Providers must not construct or modify endpoint paths.
+- OpenAI STT providers are non-streaming and require full WAV uploads.
+- Streaming or chunked STT must be implemented as a separate provider type.
+- This is an architectural invariant, not an implementation detail.
 - OpenAI LLM providers use the Chat Completions API and are fully stateless.
 - OpenAI TTS providers use the Audio → Speech API and may stream audio.
 - OpenAI TTS providers may return different encoded formats based on Content-Type.

@@ -92,7 +92,7 @@ class ConfigError(ValueError):
 
 
 SUPPORTED_PROVIDER_TYPES = {
-    "stt": {"http", "lan_http"},
+    "stt": {"http", "lan_http", "openai"},
     "llm": {"http", "lan_http", "local_echo", "openai"},
     "tts": {"http", "lan_http", "openai"},
 }
@@ -195,11 +195,23 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
             elif model_value is not None:
                 raise ConfigError(f"{base_path}.model is only valid for openai tts providers")
         else:
-            if model_value is not None:
-                raise ConfigError(f"{base_path}.model is only valid for llm or openai tts providers")
-            if voice_value is not None:
-                raise ConfigError(f"{base_path}.voice is only valid for tts providers")
-            model = None
+            if provider_type == "openai":
+                model = str(model_value) if model_value is not None else None
+                if not model or not model.strip():
+                    raise ConfigError(f"{base_path}.model is required for openai providers")
+                api_key_env = item.get("api_key_env")
+                if not api_key_env or not str(api_key_env).strip():
+                    raise ConfigError(f"{base_path}.api_key_env is required for openai providers")
+                if audio_formats != ["wav"]:
+                    raise ConfigError(f"{base_path}.audio_formats must be ['wav'] for openai stt providers")
+            else:
+                if model_value is not None:
+                    raise ConfigError(
+                        f"{base_path}.model is only valid for llm or openai tts providers"
+                    )
+                if voice_value is not None:
+                    raise ConfigError(f"{base_path}.voice is only valid for tts providers")
+                model = None
             voice = None
         endpoint_value = item.get("endpoint")
         if service == "llm" and provider_type == "local_echo":

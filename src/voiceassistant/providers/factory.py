@@ -10,6 +10,7 @@ from voiceassistant.providers.lan_stt import LanHttpSTTProvider
 from voiceassistant.providers.lan_tts import LanHttpTTSProvider
 from voiceassistant.providers.llm import LLMProvider
 from voiceassistant.providers.openai_llm import OpenAILLMProvider
+from voiceassistant.providers.openai_stt import OpenAISTTProvider
 from voiceassistant.providers.openai_tts import OpenAITTSProvider
 from voiceassistant.providers.stt import STTProvider
 from voiceassistant.providers.tts import TTSProvider
@@ -30,6 +31,14 @@ def build_stt_provider(config: ProviderConfig) -> STTProvider:
             endpoint=config.endpoint,
             timeout_s=config.timeout_s,
             api_key=resolve_api_key(config),
+        )
+    if config.provider_type == "openai":
+        return OpenAISTTProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+            model=config.model or "",
         )
     # Should be unreachable because config.py validates provider_type; defensive only.
     raise ConfigError(

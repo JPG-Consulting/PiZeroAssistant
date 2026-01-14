@@ -190,6 +190,22 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Early validation for incompatible options
   - Clear, actionable error messages
 
+- [ ] **OpenAI STT provider – follow-ups**
+
+  - [ ] Optional: document WAV-only enforcement and input validation invariant in DEVELOPMENT.md
+  - [ ] Optional: improve OpenAI STT error diagnostics (include truncated response body on failure)
+  - [ ] Optional: add typing-only test asserting OpenAI STT factory return type is STTProvider
+
+- [ ] **OpenAI provider parity**
+
+  - [ ] Ensure OpenAI STT, LLM, and TTS providers follow identical config semantics (model, api_key_env, endpoint)
+  - [ ] Add config example snippets for OpenAI providers (documentation-only)
+
+- [ ] **Provider boundary enforcement**
+
+  - [ ] Optional: add lint or review rule forbidding runtime imports of concrete providers outside factories
+  - [ ] Optional: add a comment invariant in router/state_machine reinforcing interface-only usage
+
 ## Developer tooling / infrastructure
 
 - [ ] Add a minimal `[build-system]` to `pyproject.toml` later to enable clean, future-proof packaging and non-editable installs (services/images/distribution); not required yet and must not block development, as editable installs (`-e`) are sufficient for now.

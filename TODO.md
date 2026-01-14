@@ -200,11 +200,23 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
   - [ ] Ensure OpenAI STT, LLM, and TTS providers follow identical config semantics (model, api_key_env, endpoint)
   - [ ] Add config example snippets for OpenAI providers (documentation-only)
+  - [ ] Optional: consider a shared helper for OpenAI headers (no abstraction leakage)
 
 - [ ] **Provider boundary enforcement**
 
   - [ ] Optional: add lint or review rule forbidding runtime imports of concrete providers outside factories
   - [ ] Optional: add a comment invariant in router/state_machine reinforcing interface-only usage
+
+- [ ] **Streaming STT as a separate provider type (explicitly non-default)**
+
+  - Define a distinct provider interface (no reuse of STTProvider)
+  - Document latency vs accuracy trade-offs
+  - Keep WAV-only non-streaming STT as the baseline
+
+- [ ] **Runtime diagnostics (optional, post-merge)**
+
+  - Optional latency metrics per provider
+  - Optional warning when OpenAI STT is used on constrained devices
 
 ## Developer tooling / infrastructure
 
@@ -214,6 +226,9 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 ### Architecture hardening (typing / boundaries)
 
 - [ ] Provider capability typing (e.g. streaming vs non-streaming, audio formats as type-level metadata)
+
+  - Encode non-streaming vs streaming as type-level or marker metadata
+  - Do NOT use runtime flags or conditionals in the state machine
 - [ ] Tighten ProviderRouter typing using generics per provider kind (STT / LLM / TTS)
 - [ ] Add fail-fast config typing for provider-specific required fields
 - [ ] Enforce service-mode execution invariants (no reliance on current working directory, venv-only execution)

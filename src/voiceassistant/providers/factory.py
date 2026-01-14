@@ -9,10 +9,15 @@ from voiceassistant.providers.lan_llm import LanHttpLLMProvider
 from voiceassistant.providers.lan_stt import LanHttpSTTProvider
 from voiceassistant.providers.lan_tts import LanHttpTTSProvider
 from voiceassistant.providers.llm import LLMProvider
+from voiceassistant.providers.openai_llm import OpenAILLMProvider
+from voiceassistant.providers.openai_stt import OpenAISTTProvider
+from voiceassistant.providers.openai_tts import OpenAITTSProvider
 from voiceassistant.providers.stt import STTProvider
+from voiceassistant.providers.tts import TTSProvider
 
 
 def build_stt_provider(config: ProviderConfig) -> STTProvider:
+    """Return an STTProvider contract with transcribe(wav_bytes) -> STTResponse only."""
     if config.provider_type == "http":
         return HttpSTTProvider(
             name=config.name,
@@ -26,6 +31,14 @@ def build_stt_provider(config: ProviderConfig) -> STTProvider:
             endpoint=config.endpoint,
             timeout_s=config.timeout_s,
             api_key=resolve_api_key(config),
+        )
+    if config.provider_type == "openai":
+        return OpenAISTTProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+            model=config.model or "",
         )
     # Should be unreachable because config.py validates provider_type; defensive only.
     raise ConfigError(
@@ -50,13 +63,22 @@ def build_llm_provider(config: ProviderConfig) -> LLMProvider:
             timeout_s=config.timeout_s,
             api_key=resolve_api_key(config),
         )
+    if config.provider_type == "openai":
+        return OpenAILLMProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+            model=config.model or "",
+        )
     # Should be unreachable because config.py validates provider_type; defensive only.
     raise ConfigError(
         f"Unsupported LLM provider_type '{config.provider_type}' for '{config.name}'"
     )
 
 
-def build_tts_provider(config: ProviderConfig) -> HttpTTSProvider:
+def build_tts_provider(config: ProviderConfig) -> TTSProvider:
+    """Return a TTSProvider contract with synthesize(text) -> TTSResponse only."""
     if config.provider_type == "http":
         return HttpTTSProvider(
             name=config.name,
@@ -70,6 +92,15 @@ def build_tts_provider(config: ProviderConfig) -> HttpTTSProvider:
             endpoint=config.endpoint,
             timeout_s=config.timeout_s,
             api_key=resolve_api_key(config),
+        )
+    if config.provider_type == "openai":
+        return OpenAITTSProvider(
+            name=config.name,
+            endpoint=config.endpoint,
+            timeout_s=config.timeout_s,
+            api_key=resolve_api_key(config),
+            model=config.model or "",
+            voice=config.voice,
         )
     # Should be unreachable because config.py validates provider_type; defensive only.
     raise ConfigError(

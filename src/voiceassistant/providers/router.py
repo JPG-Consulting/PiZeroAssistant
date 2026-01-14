@@ -1,5 +1,8 @@
 """Provider routing with fallback and health checks."""
 
+# This module must depend only on provider interfaces (STTProvider / LLMProvider / TTSProvider).
+# Concrete provider implementations must not be imported here.
+
 from __future__ import annotations
 
 import time

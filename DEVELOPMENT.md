@@ -90,6 +90,10 @@ The provider system is an abstraction boundary. Each service type (STT, LLM, TTS
 
 Provider-specific logic means anything beyond invoking the interface methods (for example, API payload formatting, endpoint routing, or response parsing). That logic should live inside provider implementations, not in the state machine, router, or audio pipeline.
 
+### Tooling and execution layout (architectural notes)
+
+The project intentionally uses a `src/` layout, and `pyproject.toml` is the authoritative place for tooling configuration (typing, linters, entry points). The presence of `pyproject.toml` and console scripts does not imply packaging or distribution is a current goal. Import stability and explicit execution models are architectural concerns.
+
 ### Endpoint Ownership and Third-Party API Assumption
 
 - All external services (including services running on the local network) are treated as third-party APIs.
@@ -105,14 +109,38 @@ Provider-specific logic means anything beyond invoking the interface methods (fo
 
 - **STT providers** accept WAV audio and return transcribed text.
   STT providers may return an empty transcript (`""`) to indicate silence or no detected speech; this is not an error. Missing or malformed `text` fields are treated as provider failures.
+  All STT providers must implement the STTProvider interface and expose exactly one operation: transcribe(wav_bytes) → STTResponse; the interface exists for typing and invariants only and must not contain shared behavior.
 - **LLM providers** accept an explicit message list (`LLMRequest.messages`) plus an explicit system prompt (`LLMRequest.system_prompt`) and return response text.
-  **LLM providers must not retain conversational history or dialogue state.** Each call must be treated as an independent completion; providers must not store prompts, responses, or message history across requests.
+  All LLM providers must implement the LLMProvider interface and expose exactly one operation: complete(request) → LLMResponse; the interface exists for typing and architectural invariants only, must not contain shared logic or behavior, and conversational state, memory, or history must never be stored inside providers.
   - LLM providers may stream internally for latency improvements, but they still return a single `LLMResponse` text payload to the state machine.
   - Incremental speech and sentence boundary decisions belong to the state machine, not the provider.
 - **TTS providers** accept text and return encoded audio. They may return either full WAV bytes or a streaming `AudioStream`.
+  - All TTS providers must implement the TTSProvider interface and expose exactly one operation: synthesize(text) → TTSResponse; the interface exists for typing and invariants only and must not contain shared behavior.
   - LAN TTS uses `POST /v1/audio/speech` and requests `format: pcm` so the runtime receives raw audio bytes.
   - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.
   - Playback owns decoding, buffering, and streaming control; providers must not decode audio or buffer entire output before playback begins.
+
+### Static typing as an architectural guardrail
+
+- mypy is used to enforce architectural boundaries, not style.
+- Factories must type-check as returning STTProvider/LLMProvider/TTSProvider interfaces, never concrete provider classes.
+- Interface types (STTProvider/LLMProvider/TTSProvider) remain typing-only and must not contain shared behavior.
+- The typing suite under `tests/typing/` is part of invariant enforcement; mypy failures are architectural regressions.
+- Concrete provider classes must never be imported from `voiceassistant.providers` in runtime code; violations should be caught by code review and typing tests.
+
+### OpenAI Providers
+
+- OpenAI LLM and TTS providers are treated as third-party APIs.
+- Configuration must specify full, operation-specific endpoints for OpenAI providers.
+- Providers must not construct or modify endpoint paths.
+- OpenAI STT providers are non-streaming and require full WAV uploads.
+- Streaming or chunked STT must be implemented as a separate provider type.
+- This is an architectural invariant, not an implementation detail.
+- OpenAI LLM providers use the Chat Completions API and are fully stateless.
+- OpenAI TTS providers use the Audio → Speech API and may stream audio.
+- OpenAI TTS providers may return different encoded formats based on Content-Type.
+- Audio decoding, buffering, and playback control remain owned by the runtime.
+- API keys are supplied via environment variables only.
 
 `provider_type: local_echo` is a diagnostic-only LLM provider that returns the latest user message verbatim. It has no intelligence, memory, context, or external dependency, and exists solely to validate the STT → LLM → TTS pipeline. It is not a conversational model.
 
@@ -166,6 +194,7 @@ All providers are synchronous and must raise `ProviderError` on failure. “Stat
 ### Configuration-driven selection
 
 Providers are selected via `config.yaml`. Multiple providers can be listed per service and are tried in order for fallback. Provider names are logical identifiers only (no name-prefix selection). The provider implementation is selected explicitly by `provider_type`, and unsupported types fail fast at startup during config load.
+All configuration filesystem paths that reference runtime assets (models, audio files, persistence paths) must be absolute to keep runtime execution independent of the current working directory.
 
 Example:
 

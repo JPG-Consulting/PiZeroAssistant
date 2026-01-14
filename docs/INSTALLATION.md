@@ -17,6 +17,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Type checking
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+python -m mypy
+```
+
 ## Installing a pretrained openWakeWord model
 
 The assistant will not start without a wake-word model. This project does not include a model by default. You must download a pretrained openWakeWord model manually and place it on disk.
@@ -61,6 +70,12 @@ PYTHONPATH=src python -m voiceassistant.main --config config/config.yaml
 ```
 
 Advanced users can optionally install the project in editable mode to avoid setting `PYTHONPATH`, but it is not required to get started.
+
+## Supported execution modes
+
+- Development without installation: requires `PYTHONPATH=src`.
+- Development with an editable install in a virtual environment: no `PYTHONPATH` required; the `voiceassistant` console script is available.
+- Service / production execution: use the virtual environment interpreter or console script; `PYTHONPATH` must not be relied upon in system services.
 
 ## Optional conversation memory persistence
 

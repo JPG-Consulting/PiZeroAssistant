@@ -31,6 +31,16 @@ routing:
     #   max_failures: 2
     #   cooldown_s: 60
     #   audio_formats: ["wav"]
+    # OpenAI STT currently supports WAV-only, non-streaming uploads.
+    # - name: "openai-stt"
+    #   provider_type: "openai"
+    #   endpoint: "https://api.openai.com/v1/audio/transcriptions"
+    #   model: "whisper-1"
+    #   timeout_s: 30
+    #   api_key_env: "OPENAI_API_KEY"
+    #   max_failures: 2
+    #   cooldown_s: 60
+    #   audio_formats: ["wav"]
   llm_providers:
     - name: "local-llm"
       provider_type: "http"
@@ -44,6 +54,14 @@ routing:
     #   endpoint: "http://<lan-ip>/v1/chat/completions"
     #   timeout_s: 20
     #   api_key_env: null
+    #   max_failures: 2
+    #   cooldown_s: 60
+    # - name: "openai-llm"
+    #   provider_type: "openai"
+    #   endpoint: "https://api.openai.com/v1/chat/completions"
+    #   model: "gpt-4.1-mini"
+    #   timeout_s: 20
+    #   api_key_env: "OPENAI_API_KEY"
     #   max_failures: 2
     #   cooldown_s: 60
     # - name: "echo-llm"
@@ -66,6 +84,15 @@ routing:
     #   endpoint: "http://<lan-ip>/v1/audio/speech"
     #   timeout_s: 20
     #   api_key_env: null
+    #   max_failures: 2
+    #   cooldown_s: 60
+    # - name: "openai-tts"
+    #   provider_type: "openai"
+    #   endpoint: "https://api.openai.com/v1/audio/speech"
+    #   model: "gpt-4o-mini-tts"
+    #   voice: "alloy"
+    #   timeout_s: 20
+    #   api_key_env: "OPENAI_API_KEY"
     #   max_failures: 2
     #   cooldown_s: 60
 logging:

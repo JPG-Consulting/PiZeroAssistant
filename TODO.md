@@ -190,6 +190,49 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
   - Early validation for incompatible options
   - Clear, actionable error messages
 
+- [ ] **OpenAI STT provider – follow-ups**
+
+  - [ ] Optional: document WAV-only enforcement and input validation invariant in DEVELOPMENT.md
+  - [ ] Optional: improve OpenAI STT error diagnostics (include truncated response body on failure)
+  - [ ] Optional: add typing-only test asserting OpenAI STT factory return type is STTProvider
+
+- [ ] **OpenAI provider parity**
+
+  - [ ] Ensure OpenAI STT, LLM, and TTS providers follow identical config semantics (model, api_key_env, endpoint)
+  - [ ] Add config example snippets for OpenAI providers (documentation-only)
+  - [ ] Optional: consider a shared helper for OpenAI headers (no abstraction leakage)
+
+- [ ] **Provider boundary enforcement**
+
+  - [ ] Optional: add lint or review rule forbidding runtime imports of concrete providers outside factories
+  - [ ] Optional: add a comment invariant in router/state_machine reinforcing interface-only usage
+
+- [ ] **Streaming STT as a separate provider type (explicitly non-default)**
+
+  - Define a distinct provider interface (no reuse of STTProvider)
+  - Document latency vs accuracy trade-offs
+  - Keep WAV-only non-streaming STT as the baseline
+
+- [ ] **Runtime diagnostics (optional, post-merge)**
+
+  - Optional latency metrics per provider
+  - Optional warning when OpenAI STT is used on constrained devices
+
+## Developer tooling / infrastructure
+
+- [ ] Add a minimal `[build-system]` to `pyproject.toml` later to enable clean, future-proof packaging and non-editable installs (services/images/distribution); not required yet and must not block development, as editable installs (`-e`) are sufficient for now.
+- [ ] Document and lock supported execution modes (dev with `PYTHONPATH`, editable install in a venv, service execution via venv).
+
+### Architecture hardening (typing / boundaries)
+
+- [ ] Provider capability typing (e.g. streaming vs non-streaming, audio formats as type-level metadata)
+
+  - Encode non-streaming vs streaming as type-level or marker metadata
+  - Do NOT use runtime flags or conditionals in the state machine
+- [ ] Tighten ProviderRouter typing using generics per provider kind (STT / LLM / TTS)
+- [ ] Add fail-fast config typing for provider-specific required fields
+- [ ] Enforce service-mode execution invariants (no reliance on current working directory, venv-only execution)
+
 ## UX / Hardware (optional, non-blocking)
 
 - [ ] Optional: richer LED patterns or audio-reactive effects (post-v1)

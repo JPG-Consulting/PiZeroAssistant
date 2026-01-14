@@ -1,0 +1,23 @@
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+disallow_any_generics = true
+no_implicit_optional = true
+check_untyped_defs = true
+files = ["src", "tests/typing"]
+show_error_codes = true
+pretty = true
+
+# Allow gradual typing at module boundaries where needed
+implicit_reexport = false
+
+[project]
+name = "voiceassistant"
+version = "0.0.0"
+requires-python = ">=3.11"
+
+[project.scripts]
+voiceassistant = "voiceassistant.main:main"

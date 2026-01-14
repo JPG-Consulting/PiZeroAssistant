@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -41,6 +42,8 @@ class ProviderConfig:
     cooldown_s: int
     audio_formats: Optional[List[str]]
     max_tokens_per_request: Optional[int]
+    model: Optional[str]
+    voice: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -89,9 +92,9 @@ class ConfigError(ValueError):
 
 
 SUPPORTED_PROVIDER_TYPES = {
-    "stt": {"http", "lan_http"},
-    "llm": {"http", "lan_http", "local_echo"},
-    "tts": {"http", "lan_http"},
+    "stt": {"http", "lan_http", "openai"},
+    "llm": {"http", "lan_http", "local_echo", "openai"},
+    "tts": {"http", "lan_http", "openai"},
 }
 
 STT_AUDIO_FORMATS = {"wav", "opus", "mp3"}
@@ -159,6 +162,57 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
                 raise ConfigError(
                     f"{base_path}.max_tokens_per_request must be a positive integer"
                 )
+        model_value = item.get("model")
+        voice_value = item.get("voice")
+        if service == "llm":
+            model = str(model_value) if model_value is not None else None
+            if voice_value is not None:
+                raise ConfigError(f"{base_path}.voice is only valid for tts providers")
+            if provider_type == "openai":
+                if not model or not model.strip():
+                    raise ConfigError(f"{base_path}.model is required for openai providers")
+                api_key_env = item.get("api_key_env")
+                if not api_key_env or not str(api_key_env).strip():
+                    raise ConfigError(f"{base_path}.api_key_env is required for openai providers")
+            voice = None
+        elif service == "tts":
+            if model_value is not None:
+                model = str(model_value)
+            else:
+                model = None
+            if voice_value is None:
+                voice = None
+            else:
+                voice = str(voice_value)
+                if not voice.strip():
+                    raise ConfigError(f"{base_path}.voice must be a non-empty string")
+            if provider_type == "openai":
+                if not model or not model.strip():
+                    raise ConfigError(f"{base_path}.model is required for openai providers")
+                api_key_env = item.get("api_key_env")
+                if not api_key_env or not str(api_key_env).strip():
+                    raise ConfigError(f"{base_path}.api_key_env is required for openai providers")
+            elif model_value is not None:
+                raise ConfigError(f"{base_path}.model is only valid for openai tts providers")
+        else:
+            if provider_type == "openai":
+                model = str(model_value) if model_value is not None else None
+                if not model or not model.strip():
+                    raise ConfigError(f"{base_path}.model is required for openai providers")
+                api_key_env = item.get("api_key_env")
+                if not api_key_env or not str(api_key_env).strip():
+                    raise ConfigError(f"{base_path}.api_key_env is required for openai providers")
+                if audio_formats != ["wav"]:
+                    raise ConfigError(f"{base_path}.audio_formats must be ['wav'] for openai stt providers")
+            else:
+                if model_value is not None:
+                    raise ConfigError(
+                        f"{base_path}.model is only valid for llm or openai tts providers"
+                    )
+                if voice_value is not None:
+                    raise ConfigError(f"{base_path}.voice is only valid for tts providers")
+                model = None
+            voice = None
         endpoint_value = item.get("endpoint")
         if service == "llm" and provider_type == "local_echo":
             if endpoint_value is not None and str(endpoint_value).strip() != "":
@@ -183,6 +237,8 @@ def _provider_list(raw_list: List[Dict[str, Any]], service: str) -> List[Provide
                 cooldown_s=int(item.get("cooldown_s", 60)),
                 audio_formats=audio_formats,
                 max_tokens_per_request=max_tokens_per_request,
+                model=model,
+                voice=voice,
             )
         )
     return providers
@@ -202,6 +258,30 @@ def load_config(path: str) -> AppConfig:
     persistence_path = persistence.get("path")
     if persistence_enabled and not persistence_path:
         raise ConfigError("conversation.persistence.path is required when persistence is enabled")
+    wakeword_model_path = _require(wakeword.get("model_path"), "wakeword.model_path")
+    wake_beep_path = raw.get("wake_beep_path")
+    record_output_path = raw.get("record_output_path", "/tmp/last_command.wav")
+
+    if not Path(str(wakeword_model_path)).is_absolute():
+        raise ConfigError(
+            "wakeword.model_path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
+    if wake_beep_path is not None and not Path(wake_beep_path).is_absolute():
+        raise ConfigError(
+            "wake_beep_path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
+    if not Path(str(record_output_path)).is_absolute():
+        raise ConfigError(
+            "record_output_path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
+    if persistence_enabled and not Path(str(persistence_path)).is_absolute():
+        raise ConfigError(
+            "conversation.persistence.path must be an absolute path. Relative paths are not supported because "
+            "services must not depend on the current working directory; provide an absolute path."
+        )
 
     raw_reset_commands = conversation.get(
         "reset_commands",
@@ -221,7 +301,7 @@ def load_config(path: str) -> AppConfig:
             vad_mode=int(audio.get("vad_mode", 2)),
         ),
         wakeword=WakewordConfig(
-            model_path=str(_require(wakeword.get("model_path"), "wakeword.model_path")),
+            model_path=str(wakeword_model_path),
             inference_window_ms=int(wakeword.get("inference_window_ms", 80)),
             score_threshold=float(wakeword.get("score_threshold", 0.6)),
             wakeword_cooldown_ms=int(wakeword.get("wakeword_cooldown_ms", 1500)),
@@ -247,8 +327,8 @@ def load_config(path: str) -> AppConfig:
                 path=str(persistence_path) if persistence_path is not None else None,
             ),
         ),
-        wake_beep_path=raw.get("wake_beep_path"),
-        record_output_path=str(raw.get("record_output_path", "/tmp/last_command.wav")),
+        wake_beep_path=wake_beep_path,
+        record_output_path=str(record_output_path),
     )
 
     if config.audio.frame_duration_ms not in (10, 20, 30):

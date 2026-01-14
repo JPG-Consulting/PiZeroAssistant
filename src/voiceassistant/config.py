@@ -21,6 +21,7 @@ class AudioConfig:
     max_record_seconds: int
     record_silence_ms: int
     vad_mode: int
+    tts_prewarm: "TTSPrewarmConfig"
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,11 @@ class AppConfig:
     conversation: ConversationConfig
     wake_beep_path: Optional[str]
     record_output_path: str
+
+
+@dataclass(frozen=True)
+class TTSPrewarmConfig:
+    enabled: bool
 
 
 class ConfigError(ValueError):
@@ -299,6 +305,9 @@ def load_config(path: str) -> AppConfig:
             max_record_seconds=int(audio.get("max_record_seconds", 8)),
             record_silence_ms=int(audio.get("record_silence_ms", 800)),
             vad_mode=int(audio.get("vad_mode", 2)),
+            tts_prewarm=TTSPrewarmConfig(
+                enabled=bool(audio.get("tts_prewarm", {}).get("enabled", True))
+            ),
         ),
         wakeword=WakewordConfig(
             model_path=str(wakeword_model_path),

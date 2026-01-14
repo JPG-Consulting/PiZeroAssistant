@@ -34,7 +34,7 @@ class PlaybackController:
         self._request_time: Optional[float] = None
         self._last_elapsed_time: Optional[float] = None
         self._last_stop_reason = "unknown"
-        self._expected_duration: Optional[float] = None
+        self._expected_audio_duration: Optional[float] = None
 
     def play(self, request: PlaybackRequest) -> None:
         self.stop()
@@ -46,7 +46,7 @@ class PlaybackController:
             self._start_time = None
             self._last_elapsed_time = None
             self._last_stop_reason = "unknown"
-            self._expected_duration = expected_audio_duration
+            self._expected_audio_duration = expected_audio_duration
         if expected_audio_duration is not None:
             logger.debug("Playback queued (expected_audio=%.2fs)", expected_audio_duration)
         else:
@@ -65,7 +65,7 @@ class PlaybackController:
                 elapsed = time.monotonic() - self._start_time
                 self._last_elapsed_time = elapsed
                 self._last_stop_reason = "explicit_stop"
-                self._expected_duration = None
+                self._expected_audio_duration = None
             self._request_time = None
         if should_log and elapsed is not None:
             logger.debug("Playback stopped explicitly (elapsed=%.2fs)", elapsed)
@@ -171,20 +171,20 @@ class PlaybackController:
                             self._last_elapsed_time = elapsed
                             if self._last_stop_reason == "unknown":
                                 self._last_stop_reason = "normal_end"
-                            expected = self._expected_duration
-                            self._expected_duration = None
+                            expected_audio = self._expected_audio_duration
+                            self._expected_audio_duration = None
                             self._request_time = None
                             stop_reason = self._last_stop_reason
                     if elapsed is not None:
                         logger.debug("Playback finished normally (elapsed=%.2fs)", elapsed)
                         if (
-                            expected is not None
+                            expected_audio is not None
                             and stop_reason == "normal_end"
-                            and elapsed < expected * 0.85
+                            and elapsed < expected_audio * 0.85
                         ):
                             logger.warning(
                                 "Truncated playback detected: expected=%.2fs actual=%.2fs",
-                                expected,
+                                expected_audio,
                                 elapsed,
                             )
                 try:

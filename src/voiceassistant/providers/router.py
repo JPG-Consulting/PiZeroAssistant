@@ -42,19 +42,21 @@ class ProviderRouter:
                 continue
             yield provider
 
-    def call(self, fn: Callable[[Provider], T]) -> Tuple[T, str]:
+    def call(self, fn: Callable[[Provider], T], *, count_failures: bool = True) -> Tuple[T, str]:
         errors = []
         for attempt, routed in enumerate(self._eligible()):
             if attempt > self._max_fallbacks:
                 break
             try:
                 result = fn(routed.provider)
-                self._health[routed.provider.name].failures = 0
+                if count_failures:
+                    self._health[routed.provider.name].failures = 0
                 return result, routed.provider.name
             except ProviderError as exc:
-                health = self._health[routed.provider.name]
-                health.failures += 1
-                if health.failures >= routed.max_failures:
-                    health.cooldown_until = time.monotonic() + routed.cooldown_s
+                if count_failures:
+                    health = self._health[routed.provider.name]
+                    health.failures += 1
+                    if health.failures >= routed.max_failures:
+                        health.cooldown_until = time.monotonic() + routed.cooldown_s
                 errors.append(f"{routed.provider.name}: {exc}")
         raise ProviderError("All providers failed: " + "; ".join(errors))

@@ -7,6 +7,8 @@ audio:
   max_record_seconds: 8
   record_silence_ms: 800
   vad_mode: 2
+  tts_prewarm:
+    enabled: true
 wakeword:
   model_path: "models/wakeword.onnx"
   inference_window_ms: 80

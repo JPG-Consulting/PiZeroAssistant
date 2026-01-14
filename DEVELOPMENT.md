@@ -25,6 +25,8 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 - **Capture**: `AudioCaptureThread` reads `int16` PCM frames at a fixed duration (default 20 ms). The capture callback never blocks; it drops frames when queues are full.
 - **Frame sizes**: Frames are fixed-size; invalid frames are dropped before inference.
 - **Decoupling**: Capture distributes frames to bounded queues for wakeword detection and recording. Inference never runs in the callback.
+- **Playback start**: Playback begins on the first available decoded audio chunk; it does not wait for full synthesis output.
+- **TTFS logging**: Time-to-first-audio is logged at DEBUG level, optionally annotated with the TTS provider name.
 
 ### Playback Stop Semantics
 
@@ -83,6 +85,13 @@ so the backend choice remains an explicit trade-off.
 - Providers are configured in ordered lists (`stt_providers`, `llm_providers`, `tts_providers`).
 - Each provider has independent failure counters and cooldown windows.
 - The router attempts providers in order and stops once `max_fallbacks` is exceeded.
+- Internal warm-up calls pass `count_failures=False` to avoid mutating provider health or triggering cooldowns.
+
+## Startup behavior
+
+- Optional TTS prewarming runs during assistant initialization when `audio.tts_prewarm.enabled` is true (default: true).
+- Prewarming calls `synthesize()` with a short utterance, then touches WAV headers or decodes the first audio chunk to warm decode paths.
+- Prewarm failures are best-effort and never abort startup; exceptions are logged and ignored.
 
 ## Provider architecture and extensibility
 
@@ -116,6 +125,7 @@ The project intentionally uses a `src/` layout, and `pyproject.toml` is the auth
   - Incremental speech and sentence boundary decisions belong to the state machine, not the provider.
 - **TTS providers** accept text and return encoded audio. They may return either full WAV bytes or a streaming `AudioStream`.
   - All TTS providers must implement the TTSProvider interface and expose exactly one operation: synthesize(text) → TTSResponse; the interface exists for typing and invariants only and must not contain shared behavior.
+  - Providers remain stateless; no provider retains conversational, audio, or session state between calls.
   - LAN TTS uses `POST /v1/audio/speech` and requests `format: pcm` so the runtime receives raw audio bytes.
   - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.
   - Playback owns decoding, buffering, and streaming control; providers must not decode audio or buffer entire output before playback begins.

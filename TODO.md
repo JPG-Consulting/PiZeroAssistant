@@ -101,6 +101,8 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
 - [x] **Application-owned system prompt (explicit, voice-first)**
 
+- [x] **TTS pre-warming (best-effort, config-gated)**
+
 - [ ] **Investigate/validate no-truncation playback for streaming TTS (ensure tail not cut off)**
 
 - [ ] **Add completeness tests for ffmpeg decoding (tail samples non-zero)**
@@ -121,11 +123,15 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
 - [ ] **Measure time-to-first-audio (TTS streaming)**
 
+- [ ] **Measure time-to-first-audio across providers (optional)**
+
 - [ ] **Validate ffmpeg streaming behavior on Pi Zero**
 
 - [ ] **Optional configurable decoder chunk size**
 
 - [ ] **Optional selector timeout tuning for lower barge-in latency**
+
+- [ ] **Optional speculative TTS (LLM→TTS overlap)**
 
 - [ ] **Allow non-PCM default for LAN TTS (MP3/OPUS first-byte streaming)**
 

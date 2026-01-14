@@ -9,6 +9,7 @@ import time
 import wave
 from typing import TYPE_CHECKING
 
+from voiceassistant.audio.ffmpeg_decoder import decode_to_pcm_stream
 from voiceassistant.audio.playback import PlaybackController, PlaybackRequest
 from voiceassistant.audio.recorder import Recorder, RecordingResult
 from voiceassistant.conversation.memory import ConversationMemory
@@ -105,6 +106,7 @@ class AssistantStateMachine:
             self._conversation_memory.persistence_enabled,
         )
         self._ux_manager = UXManager()
+        self._prewarm_tts()
         self._emit_ux(UxEvent.ASSISTANT_READY)
 
     def stop(self) -> None:
@@ -260,6 +262,42 @@ class AssistantStateMachine:
         logger.info("TTS complete via %s", provider_name)
         return response, provider_name
 
+    # Prewarm touches decoding intentionally to warm audio pipelines; this may move
+    # to a playback/audio-layer helper later, but stays here to avoid premature abstraction.
+    def _prewarm_tts(self) -> None:
+        if not self.config.routing.tts_providers:
+            return
+        if not self.config.audio.tts_prewarm.enabled:
+            return
+        start = time.monotonic()
+        try:
+            response, provider_name = self._tts_router.call(
+                lambda provider: provider.synthesize("ah"),
+                count_failures=False,
+            )
+            if response.wav_bytes:
+                with wave.open(io.BytesIO(response.wav_bytes), "rb") as handle:
+                    handle.getnframes()
+            if response.audio:
+                decoder = decode_to_pcm_stream(response.audio)
+                try:
+                    next(decoder, None)
+                finally:
+                    close_decoder = getattr(decoder, "close", None)
+                    if callable(close_decoder):
+                        close_decoder()
+                    response.audio.close()
+            elapsed_ms = (time.monotonic() - start) * 1000
+            logger.debug(
+                "TTS prewarm complete (provider=%s elapsed_ms=%.0f)",
+                provider_name,
+                elapsed_ms,
+            )
+        except Exception as exc:
+            logger.debug(
+                "TTS prewarm failed (%s); continuing without warm cache",
+                exc,
+            )
 
     def _build_wav_bytes(self, result: RecordingResult) -> bytes:
         buffer = io.BytesIO()

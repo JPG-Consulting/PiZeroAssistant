@@ -167,7 +167,7 @@ class AssistantStateMachine:
                 reply = self._run_llm(messages, get_system_prompt())
                 self._conversation_memory.add_assistant(reply)
                 self._conversation_memory.persist_if_enabled()
-            tts_response = self._run_tts(reply)
+            tts_response, tts_provider = self._run_tts(reply)
             self._log_tts_duration(tts_response)
         except ProviderError:
             logger.exception("Provider error in pipeline")
@@ -188,6 +188,7 @@ class AssistantStateMachine:
             PlaybackRequest(
                 wav_bytes=tts_response.wav_bytes,
                 audio=tts_response.audio,
+                provider_name=tts_provider,
             )
         )
         self._monitor_playback()
@@ -250,14 +251,14 @@ class AssistantStateMachine:
         logger.info("LLM complete via %s", provider_name)
         return response.text
 
-    def _run_tts(self, text: str) -> TTSResponse:
+    def _run_tts(self, text: str) -> tuple[TTSResponse, str]:
         self._state = AssistantState.TTS
         logger.debug('TTS input text (chars=%d): "%s"', len(text), text)
         response, provider_name = self._tts_router.call(
             lambda provider: provider.synthesize(text)
         )
         logger.info("TTS complete via %s", provider_name)
-        return response
+        return response, provider_name
 
 
     def _build_wav_bytes(self, result: RecordingResult) -> bytes:

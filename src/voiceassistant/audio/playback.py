@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 class PlaybackRequest:
     wav_bytes: Optional[bytes] = None
     audio: Optional[AudioStream] = None
+    provider_name: Optional[str] = None
 
 
 class PlaybackController:
@@ -30,6 +31,7 @@ class PlaybackController:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._start_time: Optional[float] = None
+        self._request_time: Optional[float] = None
         self._last_elapsed_time: Optional[float] = None
         self._last_stop_reason = "unknown"
         self._expected_duration: Optional[float] = None
@@ -37,18 +39,20 @@ class PlaybackController:
     def play(self, request: PlaybackRequest) -> None:
         self.stop()
         self._stop_event.clear()
-        expected_duration = self._estimate_expected_duration(request)
+        request_time = time.monotonic()
+        expected_audio_duration = self._estimate_expected_duration(request)
         with self._lock:
-            self._start_time = time.monotonic()
+            self._request_time = request_time
+            self._start_time = None
             self._last_elapsed_time = None
             self._last_stop_reason = "unknown"
-            self._expected_duration = expected_duration
-        if expected_duration is not None:
-            logger.debug("Playback started (expected=%.2fs)", expected_duration)
+            self._expected_duration = expected_audio_duration
+        if expected_audio_duration is not None:
+            logger.debug("Playback queued (expected_audio=%.2fs)", expected_audio_duration)
         else:
-            logger.debug("Playback started")
+            logger.debug("Playback queued")
         self._thread = threading.Thread(
-            target=self._playback, args=(request,), name="Playback", daemon=True
+            target=self._playback, args=(request, request_time), name="Playback", daemon=True
         )
         self._thread.start()
 
@@ -62,6 +66,7 @@ class PlaybackController:
                 self._last_elapsed_time = elapsed
                 self._last_stop_reason = "explicit_stop"
                 self._expected_duration = None
+            self._request_time = None
         if should_log and elapsed is not None:
             logger.debug("Playback stopped explicitly (elapsed=%.2fs)", elapsed)
         if self._thread and self._thread.is_alive():
@@ -83,13 +88,17 @@ class PlaybackController:
         with self._lock:
             self._last_stop_reason = reason
 
-    def _playback(self, request: PlaybackRequest) -> None:  # pragma: no cover - realtime
+    def _playback(  # pragma: no cover - realtime
+        self,
+        request: PlaybackRequest,
+        request_time: float,
+    ) -> None:
         if request.audio is None and request.wav_bytes is None:
             logger.warning("Playback request contained no audio data")
             return
-        self._play_audio_stream(request)
+        self._play_audio_stream(request, request_time)
 
-    def _play_audio_stream(self, request: PlaybackRequest) -> None:
+    def _play_audio_stream(self, request: PlaybackRequest, request_time: float) -> None:
         decoder = None
         audio: Optional[AudioStream] = None
         try:
@@ -112,6 +121,8 @@ class PlaybackController:
                 total_bytes = 0
                 chunk_count = 0
                 stopped = False
+                started = False
+                ttfs_logged = False
                 for chunk in decoder:
                     # Stop latency is bounded by the decoder select timeout (~100ms);
                     # this trade-off keeps barge-in responsive without busy-looping.
@@ -121,6 +132,23 @@ class PlaybackController:
                         break
                     if not chunk:
                         continue
+                    if not started:
+                        first_audio_time = time.monotonic()
+                        with self._lock:
+                            self._start_time = first_audio_time
+                        if not ttfs_logged:
+                            ttfs_ms = (first_audio_time - request_time) * 1000
+                            if request.provider_name:
+                                logger.debug(
+                                    "[TTS] time_to_first_audio_ms=%.0f provider=%s",
+                                    ttfs_ms,
+                                    request.provider_name,
+                                )
+                            else:
+                                logger.debug("[TTS] time_to_first_audio_ms=%.0f", ttfs_ms)
+                            ttfs_logged = True
+                        started = True
+                    # Playback starts on first available audio chunk to minimize latency.
                     stream.write(chunk)
                     total_bytes += len(chunk)
                     chunk_count += 1
@@ -145,6 +173,7 @@ class PlaybackController:
                                 self._last_stop_reason = "normal_end"
                             expected = self._expected_duration
                             self._expected_duration = None
+                            self._request_time = None
                             stop_reason = self._last_stop_reason
                     if elapsed is not None:
                         logger.debug("Playback finished normally (elapsed=%.2fs)", elapsed)

@@ -62,11 +62,17 @@ class PlaybackController:
         should_log = self.is_playing()
         elapsed = None
         with self._lock:
+            logger.debug(
+                "Playback stop requested (is_playing=%s stop_reason=%s)",
+                should_log,
+                self._last_stop_reason,
+            )
             self._stop_event.set()
             if self._start_time is not None:
                 elapsed = time.monotonic() - self._start_time
                 self._last_elapsed_time = elapsed
-                self._last_stop_reason = "explicit_stop"
+                if self._last_stop_reason == "unknown":
+                    self._last_stop_reason = "explicit_stop"
                 self._expected_audio_duration = None
             self._request_time = None
         if should_log and elapsed is not None:
@@ -125,6 +131,8 @@ class PlaybackController:
                 stopped = False
                 started = False
                 ttfs_logged = False
+                last_write_time = None
+                last_chunk_size = None
                 for chunk in decoder:
                     # Stop latency is bounded by the decoder select timeout (~100ms);
                     # this trade-off keeps barge-in responsive without busy-looping.
@@ -152,8 +160,21 @@ class PlaybackController:
                         started = True
                     # Playback starts on first available audio chunk to minimize latency.
                     stream.write(chunk)
+                    last_write_time = time.monotonic()
+                    last_chunk_size = len(chunk)
                     total_bytes += len(chunk)
                     chunk_count += 1
+                last_write_time_s = (
+                    f"{last_write_time:.6f}" if last_write_time is not None else "None"
+                )
+                logger.debug(
+                    "Playback decode loop exit (stop_event=%s chunk_count=%d total_bytes=%d last_chunk_size=%s last_write_time=%s)",
+                    self._stop_event.is_set(),
+                    chunk_count,
+                    total_bytes,
+                    last_chunk_size,
+                    last_write_time_s,
+                )
                 if stopped:
                     logger.debug(
                         "Playback stopped after %d chunks (%d bytes)",
@@ -167,7 +188,7 @@ class PlaybackController:
                         total_bytes,
                     )
                     # Drain is part of normal completion; audible playback ends after drain.
-                    self._drain_output(stream)
+                    drain_duration_ms = self._drain_output(stream)
                     elapsed = None
                     with self._lock:
                         if self._start_time is not None:
@@ -181,6 +202,13 @@ class PlaybackController:
                             stop_reason = self._last_stop_reason
                     if elapsed is not None:
                         logger.debug("Playback finished normally (elapsed=%.2fs)", elapsed)
+                        if expected_audio is not None:
+                            logger.debug(
+                                "Playback duration comparison (expected=%.2fs elapsed=%.2fs drain_ms=%.1f)",
+                                expected_audio,
+                                elapsed,
+                                drain_duration_ms,
+                            )
                         if (
                             expected_audio is not None
                             and stop_reason == "normal_end"
@@ -195,12 +223,16 @@ class PlaybackController:
                     if stopped:
                         abort = getattr(stream, "abort", None)
                         if callable(abort):
+                            logger.debug("Aborting audio stream after stop event")
                             abort()
                         else:
+                            logger.debug("Stopping audio stream after stop event")
                             stream.stop()
                     else:
+                        logger.debug("Stopping audio stream after drain")
                         stream.stop()
                 finally:
+                    logger.debug("Closing audio stream")
                     stream.close()
         except FFMpegDecodeError as exc:
             logger.exception("Failed to decode audio for playback: %s", exc)
@@ -215,7 +247,7 @@ class PlaybackController:
             if audio is not None and hasattr(audio, "close"):
                 audio.close()
 
-    def _drain_output(self, stream: sd.RawOutputStream) -> None:
+    def _drain_output(self, stream: sd.RawOutputStream) -> float:
         if self._stop_event.is_set():
             with self._lock:
                 stop_reason = self._last_stop_reason or "unknown"
@@ -223,17 +255,18 @@ class PlaybackController:
                 "Skipping audio drain; stop requested (stop_reason=%s)",
                 stop_reason,
             )
-            return
+            return 0.0
         start = time.monotonic()
         drain = getattr(stream, "drain", None)
         if callable(drain):
-            logger.debug("Draining audio output device")
+            logger.debug("Draining audio output device (start=%.6f)", start)
             drain()
         else:
-            logger.debug("Draining audio output device via bounded delay")
+            logger.debug("Draining audio output device via bounded delay (start=%.6f)", start)
             time.sleep(0.02)
         duration_ms = (time.monotonic() - start) * 1000
         logger.debug("Audio output drain completed in %.1f ms", duration_ms)
+        return duration_ms
 
     def _coerce_audio_stream(self, request: PlaybackRequest) -> Optional[AudioStream]:
         if request.audio is not None:

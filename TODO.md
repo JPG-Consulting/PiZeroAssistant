@@ -69,12 +69,12 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 - [x] **Skip LLM/TTS execution on empty STT transcript (token-safe behavior)**
 - [x] **Documented STT empty-transcript contract (empty text is valid; missing text is an error)**
 
-- [ ] **Design sentence-boundary detection heuristics**
+- [x] **Design sentence-boundary detection heuristics**
 
   - Define safe speech boundaries (punctuation, pauses, length thresholds)
   - Avoid half-sentence or half-word speech output
 
-- [ ] **Sketch incremental speech coordinator**
+- [x] **Sketch incremental speech coordinator**
 
   - Lives in the state machine layer
   - Buffers streamed LLM output
@@ -131,7 +131,7 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
 - [ ] **Optional selector timeout tuning for lower barge-in latency**
 
-- [ ] **Optional speculative TTS (LLM→TTS overlap)**
+- [ ] **Optional speculative TTS (LLM→TTS overlap; requires ISC)**
 
 - [ ] **Allow non-PCM default for LAN TTS (MP3/OPUS first-byte streaming)**
 

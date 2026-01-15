@@ -24,6 +24,7 @@ from voiceassistant.providers.factory import (
     build_tts_provider,
 )
 from voiceassistant.providers.router import ProviderRouter, RoutedProvider
+from voiceassistant.speech.incremental import IncrementalSpeechCoordinator
 from voiceassistant.ux.events import UxEvent
 from voiceassistant.ux.manager import UXManager
 from voiceassistant.wakeword.service import WakewordEvent
@@ -141,6 +142,7 @@ class AssistantStateMachine:
         self._recorder.save_wav(result, self.config.record_output_path)
         self._emit_ux(UxEvent.PROCESSING)
 
+        coordinator: IncrementalSpeechCoordinator | None = None
         try:
             transcript, stt_provider = self._run_stt(result)
             self._conversation_memory.reset_if_idle(time.monotonic())
@@ -157,6 +159,7 @@ class AssistantStateMachine:
                 logger.info("Conversation reset via user command")
                 self._conversation_memory.persist_if_enabled()
                 reply = RESET_ACK_TEXT
+                speakable_chunks = [reply]
             else:
                 self._conversation_memory.add_user(transcript)
                 messages = self._conversation_memory.build_messages()
@@ -166,50 +169,32 @@ class AssistantStateMachine:
                     len(messages),
                     total_chars,
                 )
-                reply = self._run_llm(messages, get_system_prompt())
+                coordinator = IncrementalSpeechCoordinator()
+                reply, speakable_chunks = self._run_llm(
+                    messages,
+                    get_system_prompt(),
+                    coordinator,
+                )
                 self._conversation_memory.add_assistant(reply)
                 self._conversation_memory.persist_if_enabled()
-            tts_response, tts_provider = self._run_tts(reply)
-            self._log_tts_duration(tts_response)
+            self._speak_chunks(speakable_chunks, coordinator)
         except ProviderError:
+            if coordinator is not None:
+                coordinator.cancel("provider_error")
             logger.exception("Provider error in pipeline")
             self._state = AssistantState.IDLE
             self._emit_ux(UxEvent.ERROR)
             self._emit_ux(UxEvent.ASSISTANT_IDLE)
             return
         except Exception:  # pragma: no cover - defensive
+            if coordinator is not None:
+                coordinator.cancel("unexpected_error")
             logger.exception("Unexpected pipeline error")
             self._state = AssistantState.IDLE
             self._emit_ux(UxEvent.ERROR)
             self._emit_ux(UxEvent.ASSISTANT_IDLE)
             return
-
-        self._state = AssistantState.TTS
-        self._emit_ux(UxEvent.SPEAKING)
-        self._playback.play(
-            PlaybackRequest(
-                wav_bytes=tts_response.wav_bytes,
-                audio=tts_response.audio,
-                provider_name=tts_provider,
-            )
-        )
-        self._monitor_playback()
-        elapsed = self._playback.get_last_elapsed_time()
-        reason = self._playback.get_last_stop_reason()
-        if elapsed is None:
-            logger.debug(
-                "Playback lifecycle: start → stop (reason=%s, elapsed=%.2fs)",
-                reason,
-                0.0,
-            )
-        else:
-            logger.debug(
-                "Playback lifecycle: start → stop (reason=%s, elapsed=%.2fs)",
-                reason,
-                elapsed,
-            )
-        self._state = AssistantState.IDLE
-        self._emit_ux(UxEvent.ASSISTANT_IDLE)
+        return
 
     def _run_stt(self, result: RecordingResult) -> tuple[str, str]:
         self._state = AssistantState.STT
@@ -226,7 +211,12 @@ class AssistantStateMachine:
         )
         return response.text, provider_name
 
-    def _run_llm(self, messages: list[dict], system_prompt: str) -> str:
+    def _run_llm(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        coordinator: IncrementalSpeechCoordinator,
+    ) -> tuple[str, list[str]]:
         self._state = AssistantState.LLM
         logger.debug(
             "Using system prompt (present=%s, chars=%d)",
@@ -251,7 +241,11 @@ class AssistantStateMachine:
 
         response, provider_name = self._llm_router.call(_invoke)
         logger.info("LLM complete via %s", provider_name)
-        return response.text
+        chunks = coordinator.push_delta(response.text)
+        chunks.extend(coordinator.finish())
+        if not chunks:
+            chunks = [response.text]
+        return response.text, chunks
 
     def _run_tts(self, text: str) -> tuple[TTSResponse, str]:
         self._state = AssistantState.TTS
@@ -349,3 +343,50 @@ class AssistantStateMachine:
             self._ux_manager.emit(event)
         except Exception:
             return
+
+    def _speak_chunks(
+        self,
+        chunks: list[str],
+        coordinator: IncrementalSpeechCoordinator | None,
+    ) -> None:
+        if not chunks:
+            self._state = AssistantState.IDLE
+            self._emit_ux(UxEvent.ASSISTANT_IDLE)
+            return
+        self._state = AssistantState.TTS
+        self._emit_ux(UxEvent.SPEAKING)
+        for chunk in chunks:
+            tts_response, tts_provider = self._run_tts(chunk)
+            self._log_tts_duration(tts_response)
+            stop_reason = self._play_tts_response(tts_response, tts_provider)
+            if stop_reason == "barge_in":
+                if coordinator is not None:
+                    coordinator.cancel("barge_in")
+                break
+        self._state = AssistantState.IDLE
+        self._emit_ux(UxEvent.ASSISTANT_IDLE)
+
+    def _play_tts_response(self, response: TTSResponse, provider_name: str) -> str:
+        self._playback.play(
+            PlaybackRequest(
+                wav_bytes=response.wav_bytes,
+                audio=response.audio,
+                provider_name=provider_name,
+            )
+        )
+        self._monitor_playback()
+        elapsed = self._playback.get_last_elapsed_time()
+        reason = self._playback.get_last_stop_reason()
+        if elapsed is None:
+            logger.debug(
+                "Playback lifecycle: start → stop (reason=%s, elapsed=%.2fs)",
+                reason,
+                0.0,
+            )
+        else:
+            logger.debug(
+                "Playback lifecycle: start → stop (reason=%s, elapsed=%.2fs)",
+                reason,
+                elapsed,
+            )
+        return reason or "unknown"

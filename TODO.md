@@ -133,6 +133,14 @@ All items must respect the architectural invariants defined in DEVELOPMENT.md.
 
 - [ ] **Optional speculative TTS (LLM→TTS overlap; requires ISC)**
 
+- [ ] **Optimize audio buffer reuse in speculative TTS**
+
+  - Optional post-alpha optimization (not required for correctness).
+  - Avoid repeated allocation/decoding of small TTS audio buffers during speculative playback.
+  - Explore reuse or pooling of decoded PCM buffers.
+  - Consider provider-agnostic buffering.
+  - Must preserve barge-in responsiveness, correct chunk ordering, and one-time playback guarantees.
+
 - [ ] **Allow non-PCM default for LAN TTS (MP3/OPUS first-byte streaming)**
 
 - [ ] **Document AudioStream lifecycle expectations**

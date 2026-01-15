@@ -152,6 +152,23 @@ ISC non-goals:
 - ISC does not perform language detection or semantic rewriting.
 - ISC does not own audio playback, decoding, or timing behavior.
 
+### Speculative TTS (LLM–TTS Overlap)
+
+This section documents behavioral invariants and architectural guarantees, not implementation details.
+
+- Speculative TTS overlaps LLM streaming and TTS playback to reduce perceived latency.
+- It is opt-in and guarded by the `speculative_tts` config flag.
+- It is only enabled when the selected LLM provider supports streaming.
+- ISC remains the single authority for chunk boundaries.
+- Each speakable chunk must be spoken at most once.
+- Barge-in cancels speculative playback immediately.
+- On any TTS failure during speculation, speculative playback is aborted.
+- After a speculative failure, the system falls back to non-speculative sequential TTS.
+- `UxEvent.SPEAKING` may be emitted while the LLM is still generating.
+- The assistant must always return to `IDLE` exactly once.
+- Speculative TTS must never duplicate spoken audio.
+- Speculative TTS must never break conversation memory consistency or bypass cancellation semantics.
+
 #### Future Consideration (Optional): Finer-Grained Sentence Emission
 
 Today, ISC may emit multiple sentences in a single chunk to preserve stability and prosody. This is intentional and conservative. Future versions may choose to emit at earlier boundaries when safe, but any such change would be layered on top of ISC without altering provider or playback invariants and is intentionally deferred.

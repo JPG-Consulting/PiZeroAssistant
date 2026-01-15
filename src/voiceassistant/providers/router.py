@@ -42,6 +42,32 @@ class ProviderRouter:
                 continue
             yield provider
 
+    def has_streaming_provider(self) -> bool:
+        # Evaluates streaming support against currently eligible providers (health/cooldown applied).
+        return any(
+            callable(getattr(routed.provider, "stream", None))
+            for routed in self._eligible()
+        )
+
+    def _record_success(self, provider_name: str, count_failures: bool) -> None:
+        if count_failures:
+            self._health[provider_name].failures = 0
+
+    def _record_failure(
+        self,
+        provider_name: str,
+        *,
+        count_failures: bool,
+        max_failures: int,
+        cooldown_s: int,
+    ) -> None:
+        if not count_failures:
+            return
+        health = self._health[provider_name]
+        health.failures += 1
+        if health.failures >= max_failures:
+            health.cooldown_until = time.monotonic() + cooldown_s
+
     def call(self, fn: Callable[[Provider], T], *, count_failures: bool = True) -> Tuple[T, str]:
         errors = []
         for attempt, routed in enumerate(self._eligible()):
@@ -49,14 +75,39 @@ class ProviderRouter:
                 break
             try:
                 result = fn(routed.provider)
-                if count_failures:
-                    self._health[routed.provider.name].failures = 0
+                self._record_success(routed.provider.name, count_failures)
                 return result, routed.provider.name
             except ProviderError as exc:
-                if count_failures:
-                    health = self._health[routed.provider.name]
-                    health.failures += 1
-                    if health.failures >= routed.max_failures:
-                        health.cooldown_until = time.monotonic() + routed.cooldown_s
+                self._record_failure(
+                    routed.provider.name,
+                    count_failures=count_failures,
+                    max_failures=routed.max_failures,
+                    cooldown_s=routed.cooldown_s,
+                )
                 errors.append(f"{routed.provider.name}: {exc}")
         raise ProviderError("All providers failed: " + "; ".join(errors))
+
+    def call_streaming(self, fn: Callable[[Provider], T]) -> Tuple[T, str]:
+        errors = []
+        attempts = 0
+        for routed in self._eligible():
+            if not callable(getattr(routed.provider, "stream", None)):
+                continue
+            if attempts > self._max_fallbacks:
+                break
+            try:
+                result = fn(routed.provider)
+                self._record_success(routed.provider.name, count_failures=True)
+                return result, routed.provider.name
+            except ProviderError as exc:
+                self._record_failure(
+                    routed.provider.name,
+                    count_failures=True,
+                    max_failures=routed.max_failures,
+                    cooldown_s=routed.cooldown_s,
+                )
+                errors.append(f"{routed.provider.name}: {exc}")
+            attempts += 1
+        if errors:
+            raise ProviderError("All providers failed: " + "; ".join(errors))
+        raise ProviderError("No streaming providers available")

@@ -235,14 +235,16 @@ class PlaybackController:
                             logger.debug("Aborting audio stream after stop event")
                             abort()
                         else:
+                            # stop() is reserved for non-normal termination (barge-in/explicit stop).
                             logger.debug("Stopping audio stream after stop event")
                             stream.stop()
                     else:
-                        logger.debug("Stopping audio stream after drain")
-                        stream.stop()
+                        # On normal completion, avoid stop(); allow natural closure for audible completion.
+                        logger.debug("Allowing audio stream to close naturally after drain")
                 finally:
-                    logger.debug("Closing audio stream")
-                    stream.close()
+                    if stopped:
+                        logger.debug("Closing audio stream after stop event")
+                        stream.close()
         except FFMpegDecodeError as exc:
             logger.exception("Failed to decode audio for playback: %s", exc)
         except wave.Error:

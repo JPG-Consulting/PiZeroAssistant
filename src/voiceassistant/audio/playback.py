@@ -190,6 +190,8 @@ class PlaybackController:
                     # Drain is part of normal completion; audible playback ends after drain.
                     drain_duration_ms = self._drain_output(stream)
                     elapsed = None
+                    expected_audio = None
+                    stop_reason = None
                     with self._lock:
                         if self._start_time is not None:
                             elapsed = time.monotonic() - self._start_time
@@ -200,6 +202,13 @@ class PlaybackController:
                             self._expected_audio_duration = None
                             self._request_time = None
                             stop_reason = self._last_stop_reason
+                    if not self._stop_event.is_set() and stop_reason == "normal_end":
+                        grace_delay_ms = 50
+                        logger.debug(
+                            "Applying hardware buffer grace delay (duration_ms=%d)",
+                            grace_delay_ms,
+                        )
+                        time.sleep(grace_delay_ms / 1000)
                     if elapsed is not None:
                         logger.debug("Playback finished normally (elapsed=%.2fs)", elapsed)
                         if expected_audio is not None:

@@ -6,6 +6,7 @@ import os
 import selectors
 import subprocess
 import threading
+import time
 from typing import Iterator
 
 from voiceassistant.audio.stream import AudioStream
@@ -21,15 +22,29 @@ logger = get_logger(__name__)
 
 def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Iterator[bytes]:
     if audio.format == "pcm":
+        start_time = time.monotonic()
         total_bytes = 0
         frame_size = 2 * audio.channels
+        last_chunk_size = None
+        chunk_count = 0
         for chunk in audio.iter_chunks():
             total_bytes += len(chunk)
+            last_chunk_size = len(chunk)
+            chunk_count += 1
             yield chunk
         remainder = total_bytes % frame_size
         if remainder:
             # Pad to full PCM frames to prevent audio truncation at stream end (PortAudio drops partial frames).
             yield b"\x00" * (frame_size - remainder)
+        elapsed_ms = (time.monotonic() - start_time) * 1000
+        logger.debug(
+            "PCM decode completed chunks=%d total_bytes=%d last_chunk_size=%s remainder=%d elapsed_ms=%.1f",
+            chunk_count,
+            total_bytes,
+            last_chunk_size,
+            remainder,
+            elapsed_ms,
+        )
         return
 
     cmd = [
@@ -65,6 +80,7 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
 
     stop_event = threading.Event()
     writer_errors: list[Exception] = []
+    start_time = time.monotonic()
 
     def _writer() -> None:
         try:
@@ -94,6 +110,8 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
     selector = selectors.DefaultSelector()
     stderr_tail = bytearray()
     total_stdout_bytes = 0
+    last_chunk_size = None
+    chunk_count = 0
     frame_size = 2 * audio.channels
     stdout_eof = False
     proc_exited = False
@@ -128,6 +146,8 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
                     eof = True
                     break
                 total_stdout_bytes += len(chunk)
+                last_chunk_size = len(chunk)
+                chunk_count += 1
                 yield chunk
             if eof:
                 break
@@ -152,14 +172,20 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
                         stdout_eof = True
                         continue
                     total_stdout_bytes += len(chunk)
+                    last_chunk_size = len(chunk)
+                    chunk_count += 1
                     yield chunk
             proc.wait()
+            elapsed_ms = (time.monotonic() - start_time) * 1000
             logger.debug(
-                "ffmpeg decode completed stdout_bytes=%d stdout_eof=%s proc_exited=%s returncode=%s",
+                "ffmpeg decode completed stdout_bytes=%d stdout_eof=%s proc_exited=%s returncode=%s chunks=%d last_chunk_size=%s elapsed_ms=%.1f",
                 total_stdout_bytes,
                 stdout_eof,
                 proc_exited,
                 proc.returncode,
+                chunk_count,
+                last_chunk_size,
+                elapsed_ms,
             )
             if writer_errors:
                 raise FFMpegDecodeError(str(writer_errors[0]))
@@ -176,9 +202,12 @@ def decode_to_pcm_stream(audio: AudioStream, *, chunk_size: int = 4096) -> Itera
                 # Pad to full PCM frames to prevent audio truncation at stream end (PortAudio drops partial frames).
                 yield b"\x00" * (frame_size - remainder)
     except GeneratorExit:
+        logger.debug("ffmpeg decode generator closed early; stop_event set")
         stop_event.set()
         raise
     finally:
+        if stop_event.is_set():
+            logger.debug("ffmpeg decode stopping (stdout_bytes=%d chunks=%d)", total_stdout_bytes, chunk_count)
         stop_event.set()
         selector.close()
         if proc.poll() is None:

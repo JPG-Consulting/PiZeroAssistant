@@ -350,9 +350,12 @@ class AssistantStateMachine:
         logger.debug("[Speculative TTS] speculative TTS active provider=%s", provider_name)
         logger.info("LLM complete via %s", provider_name)
         if not cancelled:
+            # Invariant: the final ISC-emitted chunk must never be spoken speculatively to prevent truncation at stream end.
             tail_chunks = coordinator.finish()
             for chunk in tail_chunks:
-                _handle_isc_chunk(chunk)
+                if len(chunk) < 10:
+                    logger.debug("[Speculative TTS] forcing tail playback chars=%d", len(chunk))
+                fallback_chunks.append(chunk)
 
         if fallback_chunks and not cancelled:
             for chunk in fallback_chunks:

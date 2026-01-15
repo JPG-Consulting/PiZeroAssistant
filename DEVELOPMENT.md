@@ -161,6 +161,8 @@ This section documents behavioral invariants and architectural guarantees, not i
 - It is only enabled when the selected LLM provider supports streaming.
 - ISC remains the single authority for chunk boundaries.
 - Each speakable chunk must be spoken at most once.
+- The final chunk emitted by ISC must never be spoken speculatively; it must be rendered only after LLM completion to guarantee that trailing phonemes, punctuation, or very short terminal fragments are not truncated. Correctness takes precedence over latency at stream termination.
+- This rule applies regardless of chunk size or speculative playback state.
 - Barge-in cancels speculative playback immediately.
 - On any TTS failure during speculation, speculative playback is aborted.
 - After a speculative failure, the system falls back to non-speculative sequential TTS.

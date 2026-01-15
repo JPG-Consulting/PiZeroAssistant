@@ -11,6 +11,7 @@ from voiceassistant.config import (
     LoggingConfig,
     ProviderConfig,
     RoutingConfig,
+    TTSPrewarmConfig,
     WakewordConfig,
 )
 from voiceassistant.state_machine import AssistantState, AssistantStateMachine
@@ -93,6 +94,7 @@ def build_test_config() -> AppConfig:
             max_record_seconds=2,
             record_silence_ms=400,
             vad_mode=2,
+            tts_prewarm=TTSPrewarmConfig(enabled=False),
         ),
         wakeword=WakewordConfig(
             model_path="dummy.onnx",
@@ -123,6 +125,7 @@ def build_test_config() -> AppConfig:
         ),
         wake_beep_path=None,
         record_output_path="/tmp/test.wav",
+        speculative_tts=False,
     )
 
 

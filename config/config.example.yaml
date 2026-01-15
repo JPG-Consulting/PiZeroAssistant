@@ -101,6 +101,9 @@ logging:
   level: "INFO"
   module_levels:
     voiceassistant.wakeword.service: "INFO"
+# Speculative TTS overlaps LLM generation and TTS playback to reduce latency at
+# the cost of additional complexity.
+speculative_tts: false
 conversation:
   enabled: true
   max_turns: 6

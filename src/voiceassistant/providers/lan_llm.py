@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 
@@ -30,7 +30,22 @@ class LanHttpLLMProvider(HttpProvider):
     ) -> None:
         super().__init__(name, endpoint, timeout_s, api_key)
 
+    def stream(
+        self,
+        req: LLMRequest,
+        on_delta: Callable[[str], None],
+    ) -> LLMResponse:
+        return self._stream_request(req, on_delta=on_delta)
+
     def complete(self, req: LLMRequest) -> LLMResponse:
+        return self._stream_request(req)
+
+    def _stream_request(
+        self,
+        req: LLMRequest,
+        *,
+        on_delta: Optional[Callable[[str], None]] = None,
+    ) -> LLMResponse:
         payload = {"messages": build_messages_with_system(req.messages, req.system_prompt), "stream": True}
         if req.max_tokens is not None:
             payload["max_tokens"] = req.max_tokens
@@ -83,6 +98,8 @@ class LanHttpLLMProvider(HttpProvider):
                         continue
                     if first_token_time is None:
                         first_token_time = time.monotonic()
+                    if on_delta is not None:
+                        on_delta(fragment)
                     parts.append(fragment)
                     total_chars += len(fragment)
         except requests.RequestException as exc:

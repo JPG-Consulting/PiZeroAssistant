@@ -143,6 +143,7 @@ class AssistantStateMachine:
         self._emit_ux(UxEvent.PROCESSING)
 
         coordinator: IncrementalSpeechCoordinator | None = None
+        used_speculative = False
         try:
             transcript, stt_provider = self._run_stt(result)
             self._conversation_memory.reset_if_idle(time.monotonic())
@@ -170,14 +171,23 @@ class AssistantStateMachine:
                     total_chars,
                 )
                 coordinator = IncrementalSpeechCoordinator()
-                reply, speakable_chunks = self._run_llm(
-                    messages,
-                    get_system_prompt(),
-                    coordinator,
-                )
+                if self.config.speculative_tts:
+                    used_speculative = True
+                    reply = self._run_llm_speculative(
+                        messages,
+                        get_system_prompt(),
+                        coordinator,
+                    )
+                else:
+                    reply, speakable_chunks = self._run_llm(
+                        messages,
+                        get_system_prompt(),
+                        coordinator,
+                    )
                 self._conversation_memory.add_assistant(reply)
                 self._conversation_memory.persist_if_enabled()
-            self._speak_chunks(speakable_chunks, coordinator)
+            if not used_speculative:
+                self._speak_chunks(speakable_chunks, coordinator)
         except ProviderError:
             if coordinator is not None:
                 coordinator.cancel("provider_error")
@@ -246,6 +256,115 @@ class AssistantStateMachine:
         if not chunks:
             chunks = [response.text]
         return response.text, chunks
+
+    def _run_llm_speculative(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        coordinator: IncrementalSpeechCoordinator,
+    ) -> str:
+        logger.debug("[Speculative TTS] attempting speculative TTS")
+        if not self._llm_router.has_streaming_provider():
+            logger.debug(
+                "[Speculative TTS] no streaming LLM provider available; falling back"
+            )
+            reply, speakable_chunks = self._run_llm(
+                messages,
+                system_prompt,
+                coordinator,
+            )
+            self._speak_chunks(speakable_chunks, coordinator)
+            return reply
+
+        self._state = AssistantState.LLM
+        speaking_started = False
+        cancelled = False
+        speculative_active = True
+        fallback_chunks: list[str] = []
+        played_chunks: set[str] = set()
+
+        def _start_speaking() -> None:
+            nonlocal speaking_started
+            if speaking_started:
+                return
+            # LLM and TTS can overlap here; we reflect the user-perceived speaking phase.
+            self._state = AssistantState.TTS
+            self._emit_ux(UxEvent.SPEAKING)
+            speaking_started = True
+
+        def _handle_barge_in() -> None:
+            nonlocal cancelled
+            cancelled = True
+            coordinator.cancel("barge_in")
+            logger.debug("[Speculative TTS] cancelled reason=barge_in")
+
+        def _play_chunk(chunk: str) -> None:
+            nonlocal cancelled
+            _start_speaking()
+            tts_response, tts_provider = self._run_tts(chunk)
+            self._log_tts_duration(tts_response)
+            stop_reason = self._play_tts_response(tts_response, tts_provider)
+            if stop_reason == "barge_in":
+                _handle_barge_in()
+            elif not cancelled:
+                played_chunks.add(chunk)
+
+        def _handle_isc_chunk(chunk: str) -> None:
+            nonlocal speculative_active
+            if cancelled:
+                return
+            if speculative_active:
+                logger.debug("[Speculative TTS] chunk_to_tts chars=%d", len(chunk))
+                try:
+                    _play_chunk(chunk)
+                except ProviderError:
+                    logger.exception("Speculative TTS failed; falling back to non-speculative")
+                    speculative_active = False
+                    logger.debug("[Speculative TTS] aborted; falling back to non-speculative")
+                    fallback_chunks.append(chunk)
+            else:
+                fallback_chunks.append(chunk)
+
+        def _invoke(provider: LLMProvider) -> LLMResponse:
+            max_tokens, supports_native = self._llm_limits.get(
+                provider.name,
+                (None, False),
+            )
+            request = LLMRequest(
+                messages=messages,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens if supports_native else None,
+            )
+            stream = getattr(provider, "stream", None)
+            if not callable(stream):
+                raise ProviderError("LLM provider does not support streaming")
+
+            def _on_delta(delta: str) -> None:
+                chunks = coordinator.push_delta(delta)
+                for chunk in chunks:
+                    _handle_isc_chunk(chunk)
+
+            return stream(request, _on_delta)
+
+        response, provider_name = self._llm_router.call_streaming(_invoke)
+        logger.debug("[Speculative TTS] speculative TTS active provider=%s", provider_name)
+        logger.info("LLM complete via %s", provider_name)
+        if not cancelled:
+            tail_chunks = coordinator.finish()
+            for chunk in tail_chunks:
+                _handle_isc_chunk(chunk)
+
+        if fallback_chunks and not cancelled:
+            for chunk in fallback_chunks:
+                if cancelled:
+                    break
+                if chunk in played_chunks:
+                    continue
+                _play_chunk(chunk)
+
+        self._state = AssistantState.IDLE
+        self._emit_ux(UxEvent.ASSISTANT_IDLE)
+        return response.text
 
     def _run_tts(self, text: str) -> tuple[TTSResponse, str]:
         self._state = AssistantState.TTS

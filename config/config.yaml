@@ -45,6 +45,7 @@ logging:
   level: "INFO"
   module_levels:
     voiceassistant.wakeword.service: "INFO"
+speculative_tts: false
 conversation:
   enabled: true
   max_turns: 6

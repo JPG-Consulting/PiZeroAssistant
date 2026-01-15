@@ -86,6 +86,7 @@ class AppConfig:
     conversation: ConversationConfig
     wake_beep_path: Optional[str]
     record_output_path: str
+    speculative_tts: bool
 
 
 @dataclass(frozen=True)
@@ -338,6 +339,7 @@ def load_config(path: str) -> AppConfig:
         ),
         wake_beep_path=wake_beep_path,
         record_output_path=str(record_output_path),
+        speculative_tts=bool(raw.get("speculative_tts", False)),
     )
 
     if config.audio.frame_duration_ms not in (10, 20, 30):

@@ -130,6 +130,32 @@ The project intentionally uses a `src/` layout, and `pyproject.toml` is the auth
   - LAN TTS may return streaming audio or full payloads and must remain stateless like all other providers.
   - Playback owns decoding, buffering, and streaming control; providers must not decode audio or buffer entire output before playback begins.
 
+### Incremental Speech Coordination
+
+The state machine owns an Incremental Speech Coordinator (ISC) per assistant run. ISC buffers streamed LLM output and emits speakable chunks for TTS, while providers remain stateless and unaware of ISC. Chunking is punctuation-driven, length-constrained, deterministic, language-agnostic, and Unicode-safe. Playback and audio decoding remain fully owned by the playback layer.
+
+ISC invariants:
+
+- ISC never emits partial words or unstable fragments.
+- Opening punctuation (for example, Spanish inverted punctuation) is preserved by buffer semantics; chunks are always emitted from the buffer start.
+- Strong punctuation boundaries are preferred when available.
+- Length-based fallback is used only when no strong boundary exists.
+
+Adaptive first-chunk behavior:
+
+- The first emitted chunk prioritizes low latency with a shorter length threshold.
+- Subsequent chunks favor prosody and stability over latency.
+- This bias is intentional to improve perceived responsiveness on constrained hardware (for example, Raspberry Pi).
+
+ISC non-goals:
+
+- ISC does not perform language detection or semantic rewriting.
+- ISC does not own audio playback, decoding, or timing behavior.
+
+#### Future Consideration (Optional): Finer-Grained Sentence Emission
+
+Today, ISC may emit multiple sentences in a single chunk to preserve stability and prosody. This is intentional and conservative. Future versions may choose to emit at earlier boundaries when safe, but any such change would be layered on top of ISC without altering provider or playback invariants and is intentionally deferred.
+
 ### Static typing as an architectural guardrail
 
 - mypy is used to enforce architectural boundaries, not style.

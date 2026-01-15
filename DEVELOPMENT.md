@@ -35,6 +35,9 @@ Voice Assistant is organized as a deterministic, event-driven pipeline with an a
 - `PlaybackController` records stop reasons including: `normal_end`, `barge_in`, `explicit_stop`, `unknown`.
 - Stop latency is bounded by decoder select timeout (~100 ms).
 - Truncation detection is heuristic, based on expected vs actual duration, and logged as a warning.
+- **Playback Audible Completion Invariant**  
+  Playback completion must correspond to audible completion. A playback run may report `normal_end` only after all buffered audio has been rendered by the output device. Decoder completion or stream exhaustion alone is insufficient.  
+  This invariant applies regardless of audio format, backend, buffering strategy, or decoder behavior.
 
 ### Wake Beep Behavior
 

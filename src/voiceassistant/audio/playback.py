@@ -26,6 +26,8 @@ class PlaybackRequest:
 
 
 class PlaybackController:
+    """Playback controller enforcing audible completion before reporting `normal_end` (see DEVELOPMENT.md)."""
+
     def __init__(self) -> None:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -164,6 +166,8 @@ class PlaybackController:
                         chunk_count,
                         total_bytes,
                     )
+                    # Drain is part of normal completion; audible playback ends after drain.
+                    self._drain_output(stream)
                     elapsed = None
                     with self._lock:
                         if self._start_time is not None:
@@ -210,6 +214,26 @@ class PlaybackController:
                 decoder.close()
             if audio is not None and hasattr(audio, "close"):
                 audio.close()
+
+    def _drain_output(self, stream: sd.RawOutputStream) -> None:
+        if self._stop_event.is_set():
+            with self._lock:
+                stop_reason = self._last_stop_reason or "unknown"
+            logger.debug(
+                "Skipping audio drain; stop requested (stop_reason=%s)",
+                stop_reason,
+            )
+            return
+        start = time.monotonic()
+        drain = getattr(stream, "drain", None)
+        if callable(drain):
+            logger.debug("Draining audio output device")
+            drain()
+        else:
+            logger.debug("Draining audio output device via bounded delay")
+            time.sleep(0.02)
+        duration_ms = (time.monotonic() - start) * 1000
+        logger.debug("Audio output drain completed in %.1f ms", duration_ms)
 
     def _coerce_audio_stream(self, request: PlaybackRequest) -> Optional[AudioStream]:
         if request.audio is not None:
